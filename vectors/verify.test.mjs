@@ -22,7 +22,9 @@
 // as allowAnonymous / allowSystem; an SDK that has no such option ignores them.
 //
 // A case with an `issuers` list is run with issuer: [issuer, ...issuers], the
-// form jose takes for several accepted issuers.
+// form jose takes for several accepted issuers. A finding on such a case reads
+// "SDK accepts no issuers list" when the SDK errors on it; the list is for an
+// SDK that takes a list of issuers.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

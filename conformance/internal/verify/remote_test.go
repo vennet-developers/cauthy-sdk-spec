@@ -32,10 +32,17 @@ type source struct {
 
 func (s *source) set(body string, fail bool) { s.mu.Lock(); s.body, s.fail = body, fail; s.mu.Unlock() }
 
-func (s *source) fetch(context.Context) ([]byte, time.Duration, error) {
+func (s *source) fetch(ctx context.Context) ([]byte, time.Duration, error) {
 	s.fetches.Add(1)
 	if s.gate != nil {
-		<-s.gate
+		select {
+		case <-s.gate:
+		case <-ctx.Done():
+			return nil, 0, ctx.Err()
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -279,5 +286,32 @@ func TestRemoteKeysSurvivesAPanickingFetcher(t *testing.T) {
 	clk.add(31 * time.Second)
 	if _, err := r.Key(context.Background(), "a"); err != nil {
 		t.Fatalf("after the cooldown the fetch must work again: %v", err)
+	}
+}
+
+func TestNewRemoteFetchesTheIssuersWellKnownURL(t *testing.T) {
+	keys(t)
+	var paths []string
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		w.Write([]byte(setOf("a")))
+	}))
+	defer srv.Close()
+	cfg := goodConfig
+	cfg.Issuer = srv.URL
+	r, err := NewRemote(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Key(context.Background(), "a"); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(paths) != 1 || paths[0] != "/.well-known/jwks.json" {
+		t.Fatalf("fetched %v, want [/.well-known/jwks.json] of the issuer", paths)
 	}
 }

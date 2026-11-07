@@ -92,8 +92,8 @@ func Cases(k Keys) []vectors.Case {
 	hsHeader, hsPayload := jws.Segment(with(header(KidA), "alg", "HS256")), jws.Segment(person())
 	tampered := jws.Segment(with(person(), "roles", []string{"owner"}))
 	agent := with(person(), "aud", []string{"https://mcp.example.com"}, "scope", "crm:read", "client_id", "mcp-agent", "auth_time", nil)
-	system := with(person(), "sub", Client, "roles", []string{}, "email", nil, "auth_time", nil, "sys", "acme-crm")
-	guest := with(person(), "email", nil, "anon", true)
+	system := with(person(), "sub", Client, "roles", []string{}, "email", nil, "email_verified", nil, "auth_time", nil, "sys", "acme-crm")
+	guest := with(person(), "email", nil, "email_verified", nil, "anon", true)
 	attackerJWK := publicOf(k, KidAttacker, KidA, "sig")
 	customDomain := signed(with(person(), "iss", CustomIssuer))
 	// dupPayload is person() with sub written twice, the first one another's.
