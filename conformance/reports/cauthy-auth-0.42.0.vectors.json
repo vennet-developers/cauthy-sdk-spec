@@ -1,0 +1,114 @@
+{
+  "sdk": "cauthy-auth",
+  "version": "0.42.0",
+  "vectors": 67,
+  "findings": [
+    {
+      "name": "valid/exp-inside-leeway",
+      "rule": "R11",
+      "expect": "valid",
+      "reason": null,
+      "got": "invalid",
+      "detail": "cauthy-auth: token refused: \"exp\" claim timestamp check failed"
+    },
+    {
+      "name": "valid/nbf-inside-leeway",
+      "rule": "R11",
+      "expect": "valid",
+      "reason": null,
+      "got": "invalid",
+      "detail": "cauthy-auth: token refused: \"nbf\" claim timestamp check failed"
+    },
+    {
+      "name": "valid/second-issuer",
+      "rule": "R9",
+      "expect": "valid",
+      "reason": null,
+      "got": "invalid",
+      "detail": "s.charCodeAt is not a function"
+    },
+    {
+      "name": "size/too-large",
+      "rule": "R1",
+      "expect": "invalid",
+      "reason": "too_large",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "shape/padded-signature",
+      "rule": "R2",
+      "expect": "invalid",
+      "reason": "malformed",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/missing-iat",
+      "rule": "R7",
+      "expect": "invalid",
+      "reason": "missing_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/sub-not-uuid",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/roles-string",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/anon-string",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "time/iat-ahead",
+      "rule": "R11",
+      "expect": "invalid",
+      "reason": "issued_in_future",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "system/system-token",
+      "rule": "R13",
+      "expect": "invalid",
+      "reason": "system_token",
+      "got": "valid",
+      "detail": "",
+      "resolution": "fixed in cauthy-auth 0.43 and in @cauthyhq/node 1.0"
+    },
+    {
+      "name": "system/sys-empty",
+      "rule": "R13",
+      "expect": "invalid",
+      "reason": "system_token",
+      "got": "valid",
+      "detail": "",
+      "resolution": "fixed in cauthy-auth 0.43 and in @cauthyhq/node 1.0"
+    },
+    {
+      "name": "anonymous/guest",
+      "rule": "R14",
+      "expect": "invalid",
+      "reason": "anonymous_token",
+      "got": "valid",
+      "detail": "",
+      "resolution": "fixed in cauthy-auth 0.43 and in @cauthyhq/node 1.0"
+    }
+  ]
+}
