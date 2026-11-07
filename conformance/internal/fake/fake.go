@@ -16,8 +16,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -71,17 +69,12 @@ var (
 	table     *routes.Table
 )
 
-// loadTable reads protocol/routes.yaml once, relative to this source file.
+// loadTable parses the embedded route table once.
 func loadTable() *routes.Table {
 	tableOnce.Do(func() {
-		_, file, _, ok := runtime.Caller(0)
-		if !ok {
-			panic("fake: cannot locate its own source file to find protocol/routes.yaml")
-		}
-		path := filepath.Join(filepath.Dir(file), "..", "..", "..", "protocol", "routes.yaml")
-		t, err := routes.Load(path)
+		t, err := routes.Embedded()
 		if err != nil {
-			panic(fmt.Sprintf("fake: cannot load the route table from %s: %v", path, err))
+			panic(fmt.Sprintf("fake: cannot load the embedded route table: %v", err))
 		}
 		table = t
 	})

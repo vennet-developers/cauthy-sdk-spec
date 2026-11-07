@@ -13,12 +13,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"strings"
 
-	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
-	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/checks"
-	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/client"
-	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/routes"
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/runner"
 )
 
 type options struct {
@@ -31,7 +28,7 @@ func main() {
 	flag.StringVar(&o.origin, "origin", "", "the application's origin, e.g. http://localhost:3999")
 	flag.StringVar(&o.email, "email", "", "a password account in the backend's tenant")
 	flag.StringVar(&o.level, "level", "basic", "basic or strict")
-	flag.StringVar(&o.table, "table", defaultTable(), "path to protocol/routes.yaml")
+	flag.StringVar(&o.table, "table", "", "a route table to use instead of the embedded one")
 	flag.StringVar(&o.jsonOut, "json", "", "also write the report as JSON to this file")
 	flag.StringVar(&o.jwksPath, "jwks-path", "", "contract mode: the JWKS path the backend serves")
 	flag.Usage = usage
@@ -58,53 +55,29 @@ exit codes:
 `)
 }
 
-// defaultTable finds protocol/routes.yaml next to a checkout, or in the binary's directory.
-func defaultTable() string {
-	for _, p := range []string{filepath.Join("..", "protocol", "routes.yaml"), filepath.Join("protocol", "routes.yaml")} {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	exe, _ := os.Executable()
-	return filepath.Join(filepath.Dir(exe), "routes.yaml")
-}
-
 // run writes the report to out and usage or configuration errors to errOut.
 func run(o options, out, errOut io.Writer) int {
-	if o.target == "" || o.origin == "" {
-		fmt.Fprintln(errOut, "--target and --origin are required")
-		return 2
+	var table []byte
+	if o.table != "" {
+		raw, err := os.ReadFile(o.table)
+		if err != nil {
+			fmt.Fprintln(errOut, err)
+			return 2
+		}
+		table = raw
 	}
-	level := check.Basic
-	switch o.level {
-	case "basic":
-	case "strict":
-		level = check.Strict
-	default:
-		fmt.Fprintf(errOut, "unknown level %q (basic or strict)\n", o.level)
-		return 2
-	}
-	table, err := routes.Load(o.table)
+	res, err := runner.Run(runner.Options{Target: o.target, Origin: o.origin, Email: o.email, Password: o.password,
+		Level: o.level, JWKSPath: o.jwksPath, Table: table})
 	if err != nil {
-		fmt.Fprintln(errOut, err)
+		fmt.Fprintln(errOut, strings.TrimPrefix(err.Error(), runner.ErrUsage.Error()+": "))
 		return 2
 	}
-	ctx := &check.Ctx{Client: client.New(o.target, o.origin), Table: table, Email: o.email, Password: o.password, JWKSPath: o.jwksPath}
-	reg := &check.Registry{}
-	checks.RegisterAll(reg)
-	rep := reg.Run(ctx, level)
-	fmt.Fprint(out, rep.Text())
+	fmt.Fprint(out, res.Text)
 	if o.jsonOut != "" {
-		if err := os.WriteFile(o.jsonOut, rep.JSON(), 0o644); err != nil {
+		if err := os.WriteFile(o.jsonOut, res.JSON, 0o644); err != nil {
 			fmt.Fprintln(errOut, err)
 			return 2
 		}
 	}
-	switch {
-	case !rep.Passed():
-		return 1
-	case !rep.Complete():
-		return 3 // nothing failed, but some required checks were skipped: not a certification
-	}
-	return 0
+	return res.ExitCode()
 }
