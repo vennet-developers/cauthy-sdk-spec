@@ -4,11 +4,16 @@
 // Routes the fake does not model answer from protocol/routes.yaml: a POST
 // route gets 400 bad_request, a GET route 401 unauthenticated, and any other
 // method on a POST-only route 405 with Allow: POST. Only paths outside the
-// table answer 404.
+// table answer 404. Unmodeled GETs answer 401 even on routes that need no
+// session (such as /look or /login): a check that needs another answer from
+// such a route must model the route here first.
 package fake
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -44,15 +49,40 @@ type Server struct {
 	table    *routes.Table
 }
 
+var (
+	tableOnce sync.Once
+	table     *routes.Table
+)
+
+// loadTable reads protocol/routes.yaml once, relative to this source file.
+func loadTable() *routes.Table {
+	tableOnce.Do(func() {
+		_, file, _, ok := runtime.Caller(0)
+		if !ok {
+			panic("fake: cannot locate its own source file to find protocol/routes.yaml")
+		}
+		path := filepath.Join(filepath.Dir(file), "..", "..", "..", "protocol", "routes.yaml")
+		t, err := routes.Load(path)
+		if err != nil {
+			panic(fmt.Sprintf("fake: cannot load the route table from %s: %v", path, err))
+		}
+		table = t
+	})
+	return table
+}
+
+func newSessionValue() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
+
 const prefix = "/api/auth"
 
 func New(k Knobs) *Server {
-	_, file, _, _ := runtime.Caller(0)
-	table, err := routes.Load(filepath.Join(filepath.Dir(file), "..", "..", "..", "protocol", "routes.yaml"))
-	if err != nil {
-		panic("fake: cannot load the route table: " + err.Error())
-	}
-	s := &Server{Knobs: k, Email: "ana@example.com", Password: "correct horse battery staple", signedIn: map[string]bool{}, table: table}
+	s := &Server{Knobs: k, Email: "ana@example.com", Password: "correct horse battery staple", signedIn: map[string]bool{}, table: loadTable()}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.handle))
 	return s
 }
@@ -150,10 +180,10 @@ func (s *Server) crossSite(r *http.Request) bool {
 	return site != "" && site != "same-origin"
 }
 
-// methodsFor lists the methods the table gives a path ("" segments of the
-// form {x} match any one segment); nil when the path is not in the table.
-func (s *Server) methodsFor(path string) map[string]bool {
-	var out map[string]bool
+// methodsFor maps each method the table gives a path to its route (segments
+// of the form {x} match any one non-empty segment); nil when the path is not in the table.
+func (s *Server) methodsFor(path string) map[string]*routes.Route {
+	var out map[string]*routes.Route
 	have := strings.Split(path, "/")
 	for _, rt := range s.table.Routes {
 		want := strings.Split(rt.Path, "/")
@@ -174,9 +204,9 @@ func (s *Server) methodsFor(path string) map[string]bool {
 		}
 		if match {
 			if out == nil {
-				out = map[string]bool{}
+				out = map[string]*routes.Route{}
 			}
-			out[rt.Method] = true
+			out[rt.Method] = rt
 		}
 	}
 	return out
@@ -203,8 +233,8 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		s.text(w, 404, "Not found")
 		return
 	}
-	if !methods[method] {
-		if methods["POST"] && len(methods) == 1 {
+	if methods[method] == nil {
+		if methods[http.MethodPost] != nil && len(methods) == 1 {
 			// A POST-only route: any other method is 405 with Allow: POST.
 			if s.Knobs.HeadNot405 && method == http.MethodGet {
 				s.write(w, 200, map[string]any{"status": "ok"})
@@ -215,13 +245,15 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		s.text(w, 405, "Method not allowed")
 		return
 	}
+	route := methods[method]
 	if method == http.MethodPost {
-		if path != "/logout" && s.crossSite(r) {
+		if route.Needs("crosssite") && s.crossSite(r) {
 			s.problem(w, 403, "cross_site", "Cross-site request", "")
 			return
 		}
-		if s.Knobs.Strict && r.Header.Get("X-Cauthy-Request") == "" {
-			s.problem(w, 403, "csrf_required", "X-Cauthy-Request is required", "")
+		// POST /logout is exempt: a plain HTML form signs out and cannot add headers.
+		if s.Knobs.Strict && route.ID != "hosted.logout_post" && r.Header.Get("X-Cauthy-Request") != "1" {
+			s.problem(w, 403, "csrf_required", "X-Cauthy-Request: 1 is required", "")
 			return
 		}
 	}
@@ -255,13 +287,17 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			s.problem(w, 400, "invalid_email", "That is not an email", "email")
 			return
 		}
+		if password == "" {
+			s.problem(w, 400, "required", "The password is required", "password")
+			return
+		}
 		if email != s.Email || password != s.Password {
 			s.problem(w, 401, "invalid_credentials", "Wrong email or password", "")
 			return
 		}
 		remember, _ := body["remember"].(bool)
 		persistent := remember && (s.Knobs.PersistentAllowed || s.Knobs.RememberIgnoresTenant)
-		value := "sess-" + r.RemoteAddr
+		value := newSessionValue()
 		s.setSession(w, value, persistent)
 		out := map[string]any{"status": "signed_in", "session": s.sessionFor(value)}
 		if s.Knobs.Strict {
@@ -269,6 +305,11 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		s.write(w, 200, out)
 	case "POST /sign-out":
+		if c, err := r.Cookie("cauthy_session.0"); err == nil {
+			s.mu.Lock()
+			delete(s.signedIn, c.Value)
+			s.mu.Unlock()
+		}
 		s.clearSession(w)
 		s.write(w, 200, map[string]any{"status": "signed_out"})
 	case "GET /me":
