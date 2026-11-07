@@ -4,6 +4,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,16 +32,22 @@ type Response struct {
 type Client struct {
 	Target string // e.g. http://localhost:3999/api/auth
 	Origin string // e.g. http://localhost:3999
+	ctx    context.Context
 	http   *http.Client
 	jar    http.CookieJar
 }
 
 // New builds a client for target (the prefix URL) acting as a page on origin.
-func New(target, origin string) *Client {
+func New(target, origin string) *Client { return NewContext(context.Background(), target, origin) }
+
+// NewContext is New with every request bound to ctx: once ctx is done, no
+// request starts and those in flight are abandoned.
+func NewContext(ctx context.Context, target, origin string) *Client {
 	jar, _ := cookiejar.New(nil)
 	return &Client{
 		Target: strings.TrimSuffix(target, "/"),
 		Origin: strings.TrimSuffix(origin, "/"),
+		ctx:    ctx,
 		jar:    jar,
 		http: &http.Client{
 			Jar:     jar,
@@ -53,7 +60,10 @@ func New(target, origin string) *Client {
 }
 
 // Fresh forgets every cookie: a new browser.
-func (c *Client) Fresh() *Client { return New(c.Target, c.Origin) }
+func (c *Client) Fresh() *Client { return NewContext(c.ctx, c.Target, c.Origin) }
+
+// Context is the context the client's requests are bound to.
+func (c *Client) Context() context.Context { return c.ctx }
 
 // Cookies says what the jar holds for the target.
 func (c *Client) Cookies() []*http.Cookie {
@@ -70,7 +80,7 @@ func (c *Client) Cookies() []*http.Cookie {
 // is closed. A 429 is an error ("rate limited by the backend or Cauthy: …"),
 // because no check can say anything true about an answer that was throttled.
 func (c *Client) Do(method, path string, body []byte, headers map[string]string) (*Response, error) {
-	req, err := http.NewRequest(method, c.Target+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(c.ctx, method, c.Target+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

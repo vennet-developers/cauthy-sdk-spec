@@ -19,4 +19,8 @@ func NewBackend() *Backend {
 	return &Backend{URL: s.URL, Target: s.Target(), Email: s.Email, Password: s.Password, srv: s}
 }
 
+// Close stops the backend and closes its connections; its URL answers nothing after.
 func (b *Backend) Close() { b.srv.Close() }
+
+// SignIns says how many sessions the backend has opened.
+func (b *Backend) SignIns() int { return b.srv.SignIns() }

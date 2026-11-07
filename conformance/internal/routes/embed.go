@@ -9,7 +9,7 @@ import (
 // protocol/ (outside this module) is not present. CI keeps it equal to
 // protocol/routes.yaml.
 //
-//go:generate cp ../../../protocol/routes.yaml routes.yaml
+//go:generate go run ./copytable ../../../protocol/routes.yaml routes.yaml
 //go:embed routes.yaml
 var embedded []byte
 

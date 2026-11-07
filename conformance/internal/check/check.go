@@ -124,6 +124,11 @@ func (r *Registry) Run(ctx *Ctx, level Level) *Report {
 		rep.Target = ctx.Client.Target
 	}
 	for _, c := range r.checks {
+		if ctx.Client != nil && ctx.Client.Context().Err() != nil {
+			// Canceled: the checks left are skipped, never graded.
+			rep.Results = append(rep.Results, Graded{ID: c.ID, Group: c.Group, Level: c.Level.String(), Status: StatusSkip, Detail: "the run was canceled"})
+			continue
+		}
 		res := safeRun(c, ctx)
 		status := res.Status
 		if status == StatusFail && c.Level > level {

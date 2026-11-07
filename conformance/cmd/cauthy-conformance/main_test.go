@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ func TestRunAgainstTheFake(t *testing.T) {
 	srv := fake.New(fake.Knobs{})
 	defer srv.Close()
 	var out bytes.Buffer
-	code := run(options{
+	code := run(context.Background(), options{
 		target: srv.Target(), origin: srv.URL, email: srv.Email, password: srv.Password,
 		level: "basic", table: table,
 	}, &out, &out)
@@ -28,7 +29,7 @@ func TestRunAgainstTheFake(t *testing.T) {
 		t.Fatalf("report:\n%s", out.String())
 	}
 	out.Reset()
-	code = run(options{
+	code = run(context.Background(), options{
 		target: srv.Target(), origin: srv.URL, email: srv.Email, password: srv.Password,
 		level: "strict", table: table,
 	}, &out, &out)
@@ -41,7 +42,7 @@ func TestNoCredentialsIsIncomplete(t *testing.T) {
 	srv := fake.New(fake.Knobs{})
 	defer srv.Close()
 	var out bytes.Buffer
-	code := run(options{target: srv.Target(), origin: srv.URL, level: "basic", table: table}, &out, &out)
+	code := run(context.Background(), options{target: srv.Target(), origin: srv.URL, level: "basic", table: table}, &out, &out)
 	if code != 3 {
 		t.Fatalf("passed but skipped checks must exit 3; exit %d:\n%s", code, out.String())
 	}
@@ -59,7 +60,7 @@ func TestUsageErrorsExit2(t *testing.T) {
 		"missing table": {target: "http://x", origin: "http://x", level: "basic", table: "nope.yaml"},
 	} {
 		errOut.Reset()
-		if code := run(o, &out, &errOut); code != 2 || errOut.Len() == 0 || out.Len() != 0 {
+		if code := run(context.Background(), o, &out, &errOut); code != 2 || errOut.Len() == 0 || out.Len() != 0 {
 			t.Errorf("%s: exit %d, stderr %q, stdout %q; want 2, a message on stderr only", name, code, errOut.String(), out.String())
 		}
 	}
@@ -70,7 +71,7 @@ func TestJSONReport(t *testing.T) {
 	defer srv.Close()
 	path := filepath.Join(t.TempDir(), "report.json")
 	var out bytes.Buffer
-	code := run(options{target: srv.Target(), origin: srv.URL, email: srv.Email, password: srv.Password, level: "basic", table: table, jsonOut: path}, &out, &out)
+	code := run(context.Background(), options{target: srv.Target(), origin: srv.URL, email: srv.Email, password: srv.Password, level: "basic", table: table, jsonOut: path}, &out, &out)
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out.String())
 	}
@@ -95,7 +96,7 @@ func TestJSONWriteFailureExits2(t *testing.T) {
 	defer srv.Close()
 	var out, errOut bytes.Buffer
 	bad := filepath.Join(t.TempDir(), "no-such-dir", "report.json")
-	code := run(options{target: srv.Target(), origin: srv.URL, email: srv.Email, password: srv.Password, level: "basic", table: table, jsonOut: bad}, &out, &errOut)
+	code := run(context.Background(), options{target: srv.Target(), origin: srv.URL, email: srv.Email, password: srv.Password, level: "basic", table: table, jsonOut: bad}, &out, &errOut)
 	if code != 2 || errOut.Len() == 0 {
 		t.Fatalf("exit %d, stderr %q; want 2 with a message", code, errOut.String())
 	}

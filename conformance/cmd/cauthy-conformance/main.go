@@ -9,10 +9,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/runner"
@@ -36,7 +39,11 @@ func main() {
 	// The password is read from the environment only: a flag would end up in
 	// shell history and the process list.
 	o.password = os.Getenv("CONFORMANCE_PASSWORD")
-	os.Exit(run(o, os.Stdout, os.Stderr))
+	// Ctrl-C stops the run: no request starts after it.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	code := run(ctx, o, os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
 
 func usage() {
@@ -56,7 +63,7 @@ exit codes:
 }
 
 // run writes the report to out and usage or configuration errors to errOut.
-func run(o options, out, errOut io.Writer) int {
+func run(ctx context.Context, o options, out, errOut io.Writer) int {
 	var table []byte
 	if o.table != "" {
 		raw, err := os.ReadFile(o.table)
@@ -66,11 +73,16 @@ func run(o options, out, errOut io.Writer) int {
 		}
 		table = raw
 	}
-	res, err := runner.Run(runner.Options{Target: o.target, Origin: o.origin, Email: o.email, Password: o.password,
+	res, err := runner.Run(ctx, runner.Options{Target: o.target, Origin: o.origin, Email: o.email, Password: o.password,
 		Level: o.level, JWKSPath: o.jwksPath, Table: table})
-	if err != nil {
+	if errors.Is(err, runner.ErrUsage) {
 		fmt.Fprintln(errOut, strings.TrimPrefix(err.Error(), runner.ErrUsage.Error()+": "))
 		return 2
+	}
+	if err != nil {
+		fmt.Fprint(out, res.Text)
+		fmt.Fprintln(errOut, err)
+		return 1
 	}
 	fmt.Fprint(out, res.Text)
 	if o.jsonOut != "" {

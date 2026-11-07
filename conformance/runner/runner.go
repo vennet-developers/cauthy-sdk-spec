@@ -4,6 +4,7 @@
 package runner
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -13,23 +14,52 @@ import (
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/routes"
 )
 
-// Options says what to drive. Password is never logged or reported.
+// The levels a run grades at.
+const (
+	Basic  = "basic"  // what a cauthy-auth 0.x backend meets; the default
+	Strict = "strict" // protocol 1 in full
+)
+
+// Options says what to drive. Password is never logged or reported, and
+// Options prints without it.
 type Options struct {
 	Target   string // the backend's prefix, e.g. http://localhost:3999/api/auth
 	Origin   string // the application's origin, e.g. http://localhost:3999
 	Email    string // a password account in the backend's tenant; "" skips the signed-in checks
 	Password string
-	Level    string // "basic" (default) or "strict"
+	Level    string // Basic (default) or Strict
 	JWKSPath string // contract mode: the JWKS path the backend serves; "" otherwise
 	Table    []byte // a route table instead of the embedded one; nil for the embedded
 }
 
+// String shows the options with the password masked, so a logged Options
+// never carries it.
+func (o Options) String() string {
+	pw := ""
+	if o.Password != "" {
+		pw = "[hidden]"
+	}
+	table := "embedded"
+	if o.Table != nil {
+		table = fmt.Sprintf("%d bytes", len(o.Table))
+	}
+	return fmt.Sprintf("{Target:%s Origin:%s Email:%s Password:%s Level:%s JWKSPath:%s Table:%s}",
+		o.Target, o.Origin, o.Email, pw, o.Level, o.JWKSPath, table)
+}
+
+// GoString keeps %#v from printing the password too.
+func (o Options) GoString() string { return "runner.Options" + o.String() }
+
 // Outcome is a finished run.
 type Outcome struct {
-	Text     string // one line per check, then the counts
-	JSON     []byte // the same report as JSON, with passed, complete and counts
-	Passed   bool   // no check at or below the level failed
-	Complete bool   // no check at or below the level was skipped
+	Text string // one line per check, then the counts
+	// JSON is the same report as a JSON object: protocol (int), level,
+	// target, results (an array of {id, group, level, status, detail}, status
+	// being pass, fail, skip, advisory or n/a), then passed and complete (the
+	// verdict) and counts (status → number).
+	JSON     []byte
+	Passed   bool // no check at or below the level failed
+	Complete bool // no check at or below the level was skipped
 }
 
 // ExitCode is the runner's: 0 passed and complete, 1 a check failed, 3 nothing
@@ -48,18 +78,23 @@ func (o Outcome) ExitCode() int {
 // ErrUsage wraps every error Run answers before driving anything.
 var ErrUsage = errors.New("conformance usage")
 
-// Run drives the backend and grades it.
-func Run(o Options) (Outcome, error) {
-	if o.Target == "" || o.Origin == "" {
-		return Outcome{}, fmt.Errorf("%w: target and origin are required", ErrUsage)
+// Run drives the backend and grades it. Once ctx is done no request starts,
+// the checks left are skipped, and Run answers the partial Outcome with
+// ctx's error.
+func Run(ctx context.Context, o Options) (Outcome, error) {
+	switch {
+	case o.Target == "":
+		return Outcome{}, fmt.Errorf("%w: --target is required (the backend's prefix, e.g. http://localhost:3999/api/auth)", ErrUsage)
+	case o.Origin == "":
+		return Outcome{}, fmt.Errorf("%w: --origin is required (the application's origin, e.g. http://localhost:3999)", ErrUsage)
 	}
 	level := check.Basic
 	switch o.Level {
-	case "", "basic":
-	case "strict":
+	case "", Basic:
+	case Strict:
 		level = check.Strict
 	default:
-		return Outcome{}, fmt.Errorf("%w: unknown level %q (basic or strict)", ErrUsage, o.Level)
+		return Outcome{}, fmt.Errorf("%w: --level is basic or strict, not %q", ErrUsage, o.Level)
 	}
 	var table *routes.Table
 	var err error
@@ -69,11 +104,16 @@ func Run(o Options) (Outcome, error) {
 		table, err = routes.Embedded()
 	}
 	if err != nil {
-		return Outcome{}, fmt.Errorf("%w: %v", ErrUsage, err)
+		return Outcome{}, fmt.Errorf("%w: the route table: %v", ErrUsage, err)
 	}
-	ctx := &check.Ctx{Client: client.New(o.Target, o.Origin), Table: table, Email: o.Email, Password: o.Password, JWKSPath: o.JWKSPath}
+	c := &check.Ctx{Client: client.NewContext(ctx, o.Target, o.Origin), Table: table, Email: o.Email, Password: o.Password, JWKSPath: o.JWKSPath}
 	reg := &check.Registry{}
 	checks.RegisterAll(reg)
-	rep := reg.Run(ctx, level)
-	return Outcome{Text: rep.Text(), JSON: rep.JSON(), Passed: rep.Passed(), Complete: rep.Complete()}, nil
+	rep := reg.Run(c, level)
+	out := Outcome{Text: rep.Text(), JSON: rep.JSON(), Passed: rep.Passed(), Complete: rep.Complete()}
+	if err := ctx.Err(); err != nil {
+		out.Complete = false
+		return out, fmt.Errorf("the run stopped: %w", err)
+	}
+	return out, nil
 }
