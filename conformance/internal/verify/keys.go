@@ -32,36 +32,67 @@ type StaticKeys struct {
 	byKid map[string]*rsa.PublicKey
 }
 
-type jwk struct {
-	Kty string `json:"kty"`
-	Use string `json:"use"`
-	Alg string `json:"alg"`
-	Kid string `json:"kid"`
-	N   string `json:"n"`
-	E   string `json:"e"`
+// member reads a string-valued field of a JWK; absent is "", and ok is false
+// when the field is present but not a string. Field names are exact: Go's
+// struct decoding would also match "KID" to "kid".
+func member(m map[string]any, name string) (value string, ok bool) {
+	raw, present := m[name]
+	if !present {
+		return "", true
+	}
+	value, ok = raw.(string)
+	return value, ok
+}
+
+// verifies reports whether key_ops, when present, allows verification.
+func verifies(m map[string]any) bool {
+	raw, present := m["key_ops"]
+	if !present {
+		return true
+	}
+	ops, ok := raw.([]any)
+	if !ok {
+		return false
+	}
+	for _, op := range ops {
+		if op == "verify" {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseJWKS reads a JWK Set. Only keys a Cauthy token can be signed with are
-// kept: kty RSA, use sig or absent, alg RS256 or absent, a kid, a sound
-// modulus and exponent. Anything else is skipped, so a token naming it reads
-// as an unknown kid. Two usable keys with one kid make the set invalid.
+// kept: kty RSA, use sig or absent, alg RS256 or absent, key_ops absent or
+// holding verify, a kid, a sound modulus and exponent. A member that is
+// anything else, or malformed, is skipped, so a token naming it reads as an
+// unknown kid. Two usable keys with one kid, or no usable key at all, make
+// the set invalid.
 func ParseJWKS(raw []byte) (*StaticKeys, error) {
 	var set struct {
-		Keys []jwk `json:"keys"`
+		Keys []any `json:"keys"`
 	}
 	if err := json.Unmarshal(raw, &set); err != nil {
 		return nil, fmt.Errorf("verify: JWKS: %w", err)
 	}
-	if set.Keys == nil {
-		return nil, errors.New("verify: JWKS has no keys member")
-	}
 	k := &StaticKeys{byKid: map[string]*rsa.PublicKey{}}
-	for _, j := range set.Keys {
-		if j.Kty != "RSA" || (j.Use != "" && j.Use != "sig") || (j.Alg != "" && j.Alg != "RS256") || j.Kid == "" {
+	for _, item := range set.Keys {
+		m, ok := item.(map[string]any)
+		if !ok {
 			continue
 		}
-		n, errN := base64.RawURLEncoding.DecodeString(j.N)
-		e, errE := base64.RawURLEncoding.DecodeString(j.E)
+		kty, ok1 := member(m, "kty")
+		use, ok2 := member(m, "use")
+		alg, ok3 := member(m, "alg")
+		kid, ok4 := member(m, "kid")
+		ns, ok5 := member(m, "n")
+		es, ok6 := member(m, "e")
+		if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6) || kty != "RSA" || (use != "" && use != "sig") ||
+			(alg != "" && alg != "RS256") || kid == "" || !verifies(m) {
+			continue
+		}
+		n, errN := base64.RawURLEncoding.DecodeString(ns)
+		e, errE := base64.RawURLEncoding.DecodeString(es)
 		if errN != nil || errE != nil || len(n) == 0 || len(e) == 0 || len(e) > 4 {
 			continue
 		}
@@ -69,10 +100,13 @@ func ParseJWKS(raw []byte) (*StaticKeys, error) {
 		if exp < 3 || exp%2 == 0 {
 			continue
 		}
-		if _, dup := k.byKid[j.Kid]; dup {
-			return nil, fmt.Errorf("verify: JWKS has two keys with kid %q", j.Kid)
+		if _, dup := k.byKid[kid]; dup {
+			return nil, fmt.Errorf("verify: JWKS has two keys with kid %q", kid)
 		}
-		k.byKid[j.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(n), E: exp}
+		k.byKid[kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(n), E: exp}
+	}
+	if len(k.byKid) == 0 {
+		return nil, errors.New("verify: JWKS has no usable key")
 	}
 	return k, nil
 }

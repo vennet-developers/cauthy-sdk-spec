@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -76,6 +77,48 @@ func TestParseJWKSRefusesBadSets(t *testing.T) {
 		"not json":      `nope`,
 		"no keys":       `{}`,
 		"duplicate kid": `{"keys":[` + dup + `,` + dup + `]}`,
+	} {
+		if _, err := ParseJWKS([]byte(raw)); err == nil {
+			t.Errorf("%s: want an error", name)
+		}
+	}
+}
+
+func TestParseJWKSSkipsMalformedMembersAndHonoursKeyOps(t *testing.T) {
+	strong, _ := keys(t)
+	n := base64.RawURLEncoding.EncodeToString(strong.N.Bytes())
+	good := jwkJSON(&strong.PublicKey, "RSA", "sig", "RS256", "good")
+	member := func(extra string) string {
+		return fmt.Sprintf(`{"kty":"RSA","kid":"k","n":%q,"e":"AQAB"%s}`, n, extra)
+	}
+	raw := `{"keys":[` + good + `,"not an object",{"kty":7},` +
+		strings.Replace(member(``), `"k"`, `"upper"`, 1) + `,` +
+		`{"KTY":"RSA","KID":"loud","n":"` + n + `","e":"AQAB"},` +
+		strings.Replace(member(`,"key_ops":["sign"]`), `"k"`, `"signonly"`, 1) + `,` +
+		strings.Replace(member(`,"key_ops":["verify"]`), `"k"`, `"verifyonly"`, 1) + `,` +
+		strings.Replace(member(`,"kid":1`), `"k"`, `"dupe"`, 1) + `]}`
+	set, err := ParseJWKS([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, kid := range []string{"good", "upper", "verifyonly"} {
+		if _, err := set.Key(ctx, kid); err != nil {
+			t.Errorf("%s: %v", kid, err)
+		}
+	}
+	for _, kid := range []string{"loud", "signonly", "dupe", "k"} {
+		if _, err := set.Key(ctx, kid); !errors.Is(err, ErrUnknownKid) {
+			t.Errorf("%s: want ErrUnknownKid, got %v", kid, err)
+		}
+	}
+}
+
+func TestParseJWKSRefusesAnEmptySet(t *testing.T) {
+	for name, raw := range map[string]string{
+		"empty array":     `{"keys":[]}`,
+		"only unusable":   `{"keys":[{"kty":"EC"}]}`,
+		"keys not a list": `{"keys":{}}`,
 	} {
 		if _, err := ParseJWKS([]byte(raw)); err == nil {
 			t.Errorf("%s: want an error", name)
