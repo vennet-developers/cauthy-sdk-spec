@@ -1,0 +1,226 @@
+{
+  "protocol": 1,
+  "level": "basic",
+  "target": "http://localhost:3999/api/auth",
+  "results": [
+    {
+      "id": "protocol.unknown_is_404",
+      "group": "protocol",
+      "level": "basic",
+      "status": "pass",
+      "detail": "404 on an unknown route"
+    },
+    {
+      "id": "protocol.trailing_slash",
+      "group": "protocol",
+      "level": "basic",
+      "status": "pass",
+      "detail": "/session/ is /session"
+    },
+    {
+      "id": "protocol.head_as_get",
+      "group": "protocol",
+      "level": "basic",
+      "status": "pass",
+      "detail": "HEAD behaves as GET"
+    },
+    {
+      "id": "protocol.get_on_post_is_405",
+      "group": "protocol",
+      "level": "basic",
+      "status": "pass",
+      "detail": "405 with Allow: POST on a POST-only route"
+    },
+    {
+      "id": "protocol.no_store",
+      "group": "protocol",
+      "level": "basic",
+      "status": "pass",
+      "detail": "no-store on 4 kinds of answer (JSON and redirect), JSON where the body is JSON"
+    },
+    {
+      "id": "session.unauthenticated_shape",
+      "group": "session",
+      "level": "basic",
+      "status": "pass",
+      "detail": "{\"session\":null,\"status\":\"unauthenticated\"}"
+    },
+    {
+      "id": "session.sign_in_email",
+      "group": "session",
+      "level": "basic",
+      "status": "pass",
+      "detail": "signed_in with a PublicSession and a session cookie"
+    },
+    {
+      "id": "session.cookie_attributes",
+      "group": "session",
+      "level": "basic",
+      "status": "pass",
+      "detail": "HttpOnly; SameSite=Lax; Path=/; Secure when https"
+    },
+    {
+      "id": "session.authenticated_shape",
+      "group": "session",
+      "level": "basic",
+      "status": "pass",
+      "detail": "authenticated with user, tenantId, roles, organizations, expiresAt"
+    },
+    {
+      "id": "session.short_by_default",
+      "group": "session",
+      "level": "basic",
+      "status": "pass",
+      "detail": "no Max-Age without remember"
+    },
+    {
+      "id": "session.remember_needs_tenant",
+      "group": "session",
+      "level": "basic",
+      "status": "pass",
+      "detail": "remember is ignored when the tenant does not allow it"
+    },
+    {
+      "id": "session.remember_when_allowed",
+      "group": "session",
+      "level": "basic",
+      "status": "n/a",
+      "detail": "the tenant does not allow persistent sessions"
+    },
+    {
+      "id": "session.sign_out",
+      "group": "session",
+      "level": "basic",
+      "status": "pass",
+      "detail": "signed_out, cookie cleared, session gone"
+    },
+    {
+      "id": "errors.not_json_is_bad_request",
+      "group": "errors",
+      "level": "basic",
+      "status": "pass",
+      "detail": "400 bad_request on a non-JSON body"
+    },
+    {
+      "id": "errors.shape",
+      "group": "errors",
+      "level": "basic",
+      "status": "pass",
+      "detail": "{\"error\":{\"code\",\"message\"}}"
+    },
+    {
+      "id": "errors.validation_names_field",
+      "group": "errors",
+      "level": "basic",
+      "status": "pass",
+      "detail": "400 with field=email on an invalid email"
+    },
+    {
+      "id": "errors.wrong_password_is_not_200",
+      "group": "errors",
+      "level": "basic",
+      "status": "pass",
+      "detail": "401 invalid_credentials and no cookie"
+    },
+    {
+      "id": "errors.auth_route_401",
+      "group": "errors",
+      "level": "basic",
+      "status": "pass",
+      "detail": "401 unauthenticated on /me and /me/organizations"
+    },
+    {
+      "id": "csrf.foreign_origin_403",
+      "group": "csrf",
+      "level": "basic",
+      "status": "pass",
+      "detail": "403 cross_site on a foreign Origin"
+    },
+    {
+      "id": "csrf.fetch_site_cross_403",
+      "group": "csrf",
+      "level": "basic",
+      "status": "pass",
+      "detail": "403 cross_site on Sec-Fetch-Site: cross-site"
+    },
+    {
+      "id": "csrf.sign_out_foreign_origin_403",
+      "group": "csrf",
+      "level": "basic",
+      "status": "pass",
+      "detail": "403 cross_site on a foreign Origin"
+    },
+    {
+      "id": "csrf.fetch_site_same_site_403",
+      "group": "csrf",
+      "level": "basic",
+      "status": "pass",
+      "detail": "403 cross_site on Sec-Fetch-Site: same-site and no Origin"
+    },
+    {
+      "id": "table.every_route_answers",
+      "group": "table",
+      "level": "basic",
+      "status": "pass",
+      "detail": "every route answers its method"
+    },
+    {
+      "id": "table.deprecated_still_answer",
+      "group": "table",
+      "level": "basic",
+      "status": "pass",
+      "detail": "every route answers its method"
+    },
+    {
+      "id": "table.methods_fields",
+      "group": "table",
+      "level": "basic",
+      "status": "pass",
+      "detail": "/methods carries every required field"
+    },
+    {
+      "id": "strict.protocol_header",
+      "group": "strict",
+      "level": "strict",
+      "status": "advisory",
+      "detail": "GET /session: Cauthy-Protocol=\"\", want \"1\""
+    },
+    {
+      "id": "strict.request_header_required",
+      "group": "strict",
+      "level": "strict",
+      "status": "advisory",
+      "detail": "POST without X-Cauthy-Request: 400 {\"error\":{\"code\":\"required\",\"message\":\"Enter your email address.\",\"field\":\"email\"}}, want 403 csrf_required"
+    },
+    {
+      "id": "strict.logout_exempt",
+      "group": "strict",
+      "level": "strict",
+      "status": "pass",
+      "detail": "POST /logout without X-Cauthy-Request answered 302"
+    },
+    {
+      "id": "strict.next_on_sign_in",
+      "group": "strict",
+      "level": "strict",
+      "status": "advisory",
+      "detail": "signed_in answer has no next field"
+    },
+    {
+      "id": "strict.no_store_everywhere",
+      "group": "strict",
+      "level": "strict",
+      "status": "advisory",
+      "detail": "GET /nope-does-not-exist (404): Cache-Control=\"\", want no-store"
+    }
+  ],
+  "passed": true,
+  "complete": true,
+  "counts": {
+    "advisory": 4,
+    "fail": 0,
+    "n/a": 1,
+    "pass": 25,
+    "skip": 0
+  }
+}
