@@ -86,7 +86,7 @@ At `strict`, every such answer also carries `next`: `done`, `mfa`, `verify_email
 
 ## Routes
 
-The table is `routes.yaml`; `openapi/auth-bff.yaml` is generated from it. Groups: `hosted`, `session`, `sign-in`, `me`, `organizations`, `other`. Two routes are deprecated from version 1 and will leave in version 2: `POST /sign-in/anonymous` and `POST /me/upgrade`.
+The table is `routes.yaml`; `openapi/auth-bff.yaml` is generated from it. Groups: `hosted`, `session`, `sign-in`, `me`, `organizations`, `other`. Three routes are deprecated from version 1 and will leave in version 2: `POST /sign-in/anonymous`, `POST /me/upgrade` and `GET /me/upgrade/social/{provider}`.
 
 ## Conformance
 
