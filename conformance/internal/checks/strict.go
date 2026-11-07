@@ -32,9 +32,9 @@ func RegisterStrict(reg *check.Registry) {
 		return check.Pass("403 csrf_required without X-Cauthy-Request")
 	}})
 	reg.Add(check.Check{ID: "strict.next_on_sign_in", Group: "strict", Level: check.Strict, Run: func(c *check.Ctx) check.Result {
-		_, res, err := signIn(c, false)
-		if err != nil {
-			return check.Skip(err.Error())
+		_, res, stop := signedIn(c, slotPlain, false)
+		if stop != nil {
+			return *stop
 		}
 		if res.JSON == nil || res.JSON["next"] == nil {
 			return check.Fail("signed_in answer has no next field")

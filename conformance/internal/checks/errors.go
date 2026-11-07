@@ -67,16 +67,14 @@ func RegisterErrors(reg *check.Registry) {
 		if err != nil {
 			return check.Fail(err.Error())
 		}
-		if res.Status < 400 || res.Status >= 500 {
-			return check.Fail(fmt.Sprintf("wrong password answered %d, want a 4xx", res.Status))
-		}
-		if _, why := errorOf(res); why != "" {
-			return check.Fail("wrong password: " + why)
+		e, why := errorOf(res)
+		if res.Status != 401 || why != "" || e["code"] != "invalid_credentials" {
+			return check.Fail(fmt.Sprintf("wrong password: %d %s, want 401 invalid_credentials (%s)", res.Status, res.Body, why))
 		}
 		if len(sessionCookies(res)) > 0 {
 			return check.Fail("wrong password set a session cookie")
 		}
-		return check.Pass(fmt.Sprintf("%d with an error object and no cookie", res.Status))
+		return check.Pass("401 invalid_credentials and no cookie")
 	}})
 	reg.Add(check.Check{ID: "errors.auth_route_401", Group: "errors", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
 		for _, path := range []string{"/me", "/me/organizations"} {

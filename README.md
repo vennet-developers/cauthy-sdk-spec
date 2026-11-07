@@ -19,5 +19,12 @@ The specification behind every Cauthy SDK, and the suite that proves an SDK foll
       --target http://localhost:3999/api/auth --origin http://localhost:3999 \
       --email member@example.com --level basic
 
-It needs a backend that serves the protocol and one password account in its tenant.
+It needs a backend that serves the protocol and one test account in its tenant. The account must:
+
+- sign in with a password (not only a social or passkey login);
+- have MFA off, and a verified email (otherwise the session checks are skipped and the run is reported incomplete);
+- not sit behind a captcha on sign-in.
+
+A run signs in at most three times and signs those sessions out when it ends (best effort), so it leaves no open sessions.
+A `429` from the backend or Cauthy fails the check that met it.
 Exit code 0 when every check of the level passes.

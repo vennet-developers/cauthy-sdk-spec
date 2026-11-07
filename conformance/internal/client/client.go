@@ -5,6 +5,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -66,7 +67,8 @@ func (c *Client) Cookies() []*http.Cookie {
 // object, whatever its Content-Type. SetCookies come from net/http, which
 // reports a cleared cookie (Max-Age=0) as MaxAge -1. A text/event-stream answer
 // is returned as soon as its headers arrive, with no Body, and the connection
-// is closed.
+// is closed. A 429 is an error ("rate limited by the backend or Cauthy: …"),
+// because no check can say anything true about an answer that was throttled.
 func (c *Client) Do(method, path string, body []byte, headers map[string]string) (*Response, error) {
 	req, err := http.NewRequest(method, c.Target+path, bytes.NewReader(body))
 	if err != nil {
@@ -91,6 +93,10 @@ func (c *Client) Do(method, path string, body []byte, headers map[string]string)
 		return nil, err
 	}
 	defer res.Body.Close()
+	if res.StatusCode == http.StatusTooManyRequests {
+		raw, _ := io.ReadAll(io.LimitReader(res.Body, 200))
+		return nil, fmt.Errorf("rate limited by the backend or Cauthy: %s %s answered 429 %s", method, path, strings.TrimSpace(string(raw)))
+	}
 	if strings.HasPrefix(res.Header.Get("Content-Type"), "text/event-stream") {
 		return &Response{Status: res.StatusCode, Header: res.Header, SetCookies: res.Cookies()}, nil
 	}

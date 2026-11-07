@@ -6,9 +6,6 @@ package check
 import (
 	"fmt"
 	"slices"
-
-	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/client"
-	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/routes"
 )
 
 type Level int
@@ -23,15 +20,6 @@ func (l Level) String() string {
 		return "strict"
 	}
 	return "basic"
-}
-
-// Ctx is what a check receives: the target, the table and the one account.
-type Ctx struct {
-	Client   *client.Client
-	Table    *routes.Table
-	Email    string
-	Password string
-	JWKSPath string // "" when the backend is not in contract mode
 }
 
 // The statuses a result or a graded line can carry. A check itself answers
@@ -115,6 +103,7 @@ type Report struct {
 // Run executes every check. A failing check above the requested level is
 // reported as advisory and does not fail the run.
 func (r *Registry) Run(ctx *Ctx, level Level) *Report {
+	defer ctx.Cleanup()
 	rep := &Report{Level: level.String(), Results: []Graded{}}
 	if ctx.Table != nil {
 		rep.Protocol = ctx.Table.Version

@@ -36,6 +36,9 @@ type Knobs struct {
 	Strict                bool // Cauthy-Protocol header, X-Cauthy-Request required, next field
 	PersistentAllowed     bool // methods.persistentSessions and Max-Age on remember
 	RememberIgnoresTenant bool // sets Max-Age on remember even when the tenant does not allow it
+	SignInBroken          bool // every sign-in answers 401 invalid_credentials
+	MFARequired           bool // a correct sign-in answers mfa_required, with no session
+	RateLimited           bool // every sign-in answers 429
 }
 
 type Server struct {
@@ -45,6 +48,7 @@ type Server struct {
 	Password string
 
 	mu       sync.Mutex
+	signIns  int             // sessions opened so far
 	signedIn map[string]bool // cookie value → signed in
 	table    *routes.Table
 }
@@ -85,6 +89,19 @@ func New(k Knobs) *Server {
 	s := &Server{Knobs: k, Email: "ana@example.com", Password: "correct horse battery staple", signedIn: map[string]bool{}, table: loadTable()}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.handle))
 	return s
+}
+
+// SignIns says how many sessions the server has opened; OpenSessions how many are still open.
+func (s *Server) SignIns() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.signIns
+}
+
+func (s *Server) OpenSessions() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.signedIn)
 }
 
 func (s *Server) Target() string { return s.URL + prefix }
@@ -135,6 +152,7 @@ func (s *Server) setSession(w http.ResponseWriter, value string, persistent bool
 	}
 	s.mu.Lock()
 	s.signedIn[value] = true
+	s.signIns++
 	s.mu.Unlock()
 	http.SetCookie(w, c)
 }
@@ -272,6 +290,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		s.write(w, 200, m)
 	case "POST /sign-in/email":
+		if s.Knobs.RateLimited {
+			s.problem(w, 429, "rate_limited", "Too many attempts", "")
+			return
+		}
 		var body map[string]any
 		if json.NewDecoder(r.Body).Decode(&body) != nil || body == nil {
 			s.problem(w, 400, "bad_request", "A JSON object is required", "")
@@ -291,8 +313,12 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			s.problem(w, 400, "required", "The password is required", "password")
 			return
 		}
-		if email != s.Email || password != s.Password {
+		if s.Knobs.SignInBroken || email != s.Email || password != s.Password {
 			s.problem(w, 401, "invalid_credentials", "Wrong email or password", "")
+			return
+		}
+		if s.Knobs.MFARequired {
+			s.write(w, 200, map[string]any{"status": "mfa_required"})
 			return
 		}
 		remember, _ := body["remember"].(bool)

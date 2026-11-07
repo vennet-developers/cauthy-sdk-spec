@@ -11,18 +11,42 @@ import (
 
 const sessionCookie = "cauthy_session"
 
-// signIn signs the one account in on a fresh browser and returns it with the answer.
-func signIn(c *check.Ctx, remember bool) (*client.Client, *client.Response, error) {
+// Sign-in slots: the run signs in at most three times (see check.Ctx.SignIn).
+const (
+	slotPlain    = "plain"    // remember:false, read by many checks
+	slotShape    = "shape"    // read by authenticated_shape, then ended by sign_out
+	slotRemember = "remember" // remember:true
+)
+
+// signedIn returns the cached sign-in of a slot when it really signed the
+// account in: status 200, "signed_in" and a session cookie. Otherwise stop is
+// the result the check must return: a skip when the account cannot be used by a
+// test (no credentials, MFA, unverified email), a fail with the answer when
+// sign-in is broken.
+func signedIn(c *check.Ctx, slot string, remember bool) (b *client.Client, res *client.Response, stop *check.Result) {
+	fail := func(s string) (*client.Client, *client.Response, *check.Result) {
+		r := check.Fail(s)
+		return nil, nil, &r
+	}
 	if c.Email == "" || c.Password == "" {
-		return nil, nil, fmt.Errorf("no credentials")
+		r := check.Skip("no credentials")
+		return nil, nil, &r
 	}
-	b := c.Client.Fresh()
-	body := map[string]any{"email": c.Email, "password": c.Password}
-	if remember {
-		body["remember"] = true
+	b, res, err := c.SignIn(slot, remember)
+	if err != nil {
+		return fail(err.Error())
 	}
-	res, err := b.PostJSON("/sign-in/email", body, map[string]string{"X-Cauthy-Request": "1"})
-	return b, res, err
+	if st, _ := res.JSON["status"].(string); st == "mfa_required" || st == "verification_required" {
+		r := check.Skip("the test account must have MFA off and a verified email")
+		return nil, nil, &r
+	}
+	if res.Status != 200 || res.JSON == nil || res.JSON["status"] != "signed_in" {
+		return fail(fmt.Sprintf("POST /sign-in/email: %d %s", res.Status, res.Body))
+	}
+	if len(sessionCookies(res)) == 0 {
+		return fail("signed_in answer set no session cookie")
+	}
+	return b, res, nil
 }
 
 func sessionCookies(res *client.Response) []*http.Cookie {
@@ -56,26 +80,20 @@ func RegisterSession(reg *check.Registry) {
 		return check.Pass(`{"session":null,"status":"unauthenticated"}`)
 	}})
 	reg.Add(check.Check{ID: "session.sign_in_email", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
-		_, res, err := signIn(c, false)
-		if err != nil {
-			return check.Skip(err.Error())
-		}
-		if res.Status != 200 || res.JSON == nil || res.JSON["status"] != "signed_in" {
-			return check.Fail(fmt.Sprintf("POST /sign-in/email: %d %s", res.Status, res.Body))
+		_, res, stop := signedIn(c, slotPlain, false)
+		if stop != nil {
+			return *stop
 		}
 		sess, _ := res.JSON["session"].(map[string]any)
 		if missing, ok := hasFields(sess, "user", "tenantId", "roles", "organizations", "expiresAt"); !ok {
 			return check.Fail("signed_in answer lacks session." + missing)
 		}
-		if len(sessionCookies(res)) == 0 {
-			return check.Fail("signed_in answer set no session cookie")
-		}
 		return check.Pass("signed_in with a PublicSession and a session cookie")
 	}})
 	reg.Add(check.Check{ID: "session.cookie_attributes", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
-		_, res, err := signIn(c, false)
-		if err != nil {
-			return check.Skip(err.Error())
+		_, res, stop := signedIn(c, slotPlain, false)
+		if stop != nil {
+			return *stop
 		}
 		cks := sessionCookies(res)
 		if len(cks) == 0 {
@@ -97,9 +115,9 @@ func RegisterSession(reg *check.Registry) {
 		return check.Pass("HttpOnly; SameSite=Lax; Path=/; Secure when https")
 	}})
 	reg.Add(check.Check{ID: "session.authenticated_shape", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
-		b, _, err := signIn(c, false)
-		if err != nil {
-			return check.Skip(err.Error())
+		b, _, stop := signedIn(c, slotShape, false)
+		if stop != nil {
+			return *stop
 		}
 		res, err := b.Get("/session", nil)
 		if err != nil {
@@ -116,9 +134,9 @@ func RegisterSession(reg *check.Registry) {
 		return check.Pass("authenticated with user, tenantId, roles, organizations, expiresAt")
 	}})
 	reg.Add(check.Check{ID: "session.short_by_default", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
-		_, res, err := signIn(c, false)
-		if err != nil {
-			return check.Skip(err.Error())
+		_, res, stop := signedIn(c, slotPlain, false)
+		if stop != nil {
+			return *stop
 		}
 		for _, ck := range sessionCookies(res) {
 			if ck.MaxAge > 0 || !ck.Expires.IsZero() {
@@ -128,35 +146,35 @@ func RegisterSession(reg *check.Registry) {
 		return check.Pass("no Max-Age without remember")
 	}})
 	reg.Add(check.Check{ID: "session.remember_needs_tenant", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
-		m, err := c.Client.Fresh().Get("/methods", nil)
+		m, err := c.Methods()
 		if err != nil {
 			return check.Fail(err.Error())
 		}
 		if m.JSON != nil && m.JSON["persistentSessions"] == true {
 			return check.Skip("the tenant allows persistent sessions; see session.remember_when_allowed")
 		}
-		_, res, err := signIn(c, true)
-		if err != nil {
-			return check.Skip(err.Error())
+		_, res, stop := signedIn(c, slotRemember, true)
+		if stop != nil {
+			return *stop
 		}
 		for _, ck := range sessionCookies(res) {
-			if ck.MaxAge > 0 {
+			if ck.MaxAge > 0 || !ck.Expires.IsZero() {
 				return check.Fail("remember:true produced Max-Age although the tenant does not allow persistent sessions")
 			}
 		}
 		return check.Pass("remember is ignored when the tenant does not allow it")
 	}})
 	reg.Add(check.Check{ID: "session.remember_when_allowed", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
-		m, err := c.Client.Fresh().Get("/methods", nil)
+		m, err := c.Methods()
 		if err != nil {
 			return check.Fail(err.Error())
 		}
 		if m.JSON == nil || m.JSON["persistentSessions"] != true {
 			return check.Skip("the tenant does not allow persistent sessions")
 		}
-		_, res, err := signIn(c, true)
-		if err != nil {
-			return check.Skip(err.Error())
+		_, res, stop := signedIn(c, slotRemember, true)
+		if stop != nil {
+			return *stop
 		}
 		for _, ck := range sessionCookies(res) {
 			if ck.MaxAge != 2592000 {
@@ -166,9 +184,16 @@ func RegisterSession(reg *check.Registry) {
 		return check.Pass("Max-Age=2592000 on remember when the tenant allows it")
 	}})
 	reg.Add(check.Check{ID: "session.sign_out", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
-		b, _, err := signIn(c, false)
+		b, _, stop := signedIn(c, slotShape, false)
+		if stop != nil {
+			return *stop
+		}
+		before, err := b.Get("/session", nil)
 		if err != nil {
-			return check.Skip(err.Error())
+			return check.Fail(err.Error())
+		}
+		if before.JSON == nil || before.JSON["status"] != "authenticated" {
+			return check.Fail(fmt.Sprintf("not authenticated before sign-out: GET /session %d %s", before.Status, before.Body))
 		}
 		res, err := b.PostJSON("/sign-out", map[string]any{}, map[string]string{"X-Cauthy-Request": "1"})
 		if err != nil {
