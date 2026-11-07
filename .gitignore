@@ -1,0 +1,3 @@
+conformance/bin/
+*.test
+.DS_Store
