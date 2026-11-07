@@ -23,5 +23,24 @@ jobs:
         run: |
           go run ./cmd/gen-openapi ../protocol/routes.yaml "$RUNNER_TEMP/auth-bff.yaml"
           diff -u ../openapi/auth-bff.yaml "$RUNNER_TEMP/auth-bff.yaml"
+      - name: vectors are up to date
+        run: |
+          go run ./cmd/gen-vectors ../vectors/keys "$RUNNER_TEMP"
+          diff -u ../vectors/jwks.json "$RUNNER_TEMP/jwks.json"
+          diff -u ../vectors/tokens.json "$RUNNER_TEMP/tokens.json"
       - name: the route table has 75 routes
         run: test "$(grep -c '^  - { id:' ../protocol/routes.yaml)" = 75
+  vectors-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: cauthy-auth 0.42.0 runs the vectors (findings are reported, not failed)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/sdk" --ignore-scripts --no-audit --no-fund cauthy-auth@0.42.0 jose@5.10.0
+          CAUTHY_AUTH_DIR="$RUNNER_TEMP/sdk/node_modules/cauthy-auth" VECTORS_REPORT="$RUNNER_TEMP/findings.json" \
+            node --test vectors/verify.test.mjs
+      - name: the committed report matches the run
+        run: diff -u conformance/reports/cauthy-auth-0.42.0.vectors.json "$RUNNER_TEMP/findings.json"
