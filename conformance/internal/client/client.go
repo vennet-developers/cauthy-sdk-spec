@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+// Response is what one request got back. Body is empty for an event stream.
 type Response struct {
 	Status     int
 	Header     http.Header
@@ -21,6 +22,11 @@ type Response struct {
 	SetCookies []*http.Cookie
 }
 
+// Client is one browser: its own cookie jar, aimed at one backend. Besides the
+// caller's headers it adds Sec-Fetch-Site: same-origin to every request and
+// Origin (the application's) to every POST; a header passed to Do with the
+// value "" removes the default. It is not safe to share across goroutines
+// that need separate cookies; use Fresh for a new browser.
 type Client struct {
 	Target string // e.g. http://localhost:3999/api/auth
 	Origin string // e.g. http://localhost:3999
@@ -28,6 +34,7 @@ type Client struct {
 	jar    http.CookieJar
 }
 
+// New builds a client for target (the prefix URL) acting as a page on origin.
 func New(target, origin string) *Client {
 	jar, _ := cookiejar.New(nil)
 	return &Client{
@@ -54,7 +61,12 @@ func (c *Client) Cookies() []*http.Cookie {
 }
 
 // Do sends method path with an optional body and extra headers. A path may
-// carry a query string. Headers set here win over the defaults.
+// carry a query string. Headers set here win over the defaults; "" removes a
+// default. The answer's JSON is filled whenever the body parses as a JSON
+// object, whatever its Content-Type. SetCookies come from net/http, which
+// reports a cleared cookie (Max-Age=0) as MaxAge -1. A text/event-stream answer
+// is returned as soon as its headers arrive, with no Body, and the connection
+// is closed.
 func (c *Client) Do(method, path string, body []byte, headers map[string]string) (*Response, error) {
 	req, err := http.NewRequest(method, c.Target+path, bytes.NewReader(body))
 	if err != nil {
@@ -63,7 +75,8 @@ func (c *Client) Do(method, path string, body []byte, headers map[string]string)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if method == "POST" {
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	if method == http.MethodPost {
 		req.Header.Set("Origin", c.Origin)
 	}
 	for k, v := range headers {
@@ -78,6 +91,9 @@ func (c *Client) Do(method, path string, body []byte, headers map[string]string)
 		return nil, err
 	}
 	defer res.Body.Close()
+	if strings.HasPrefix(res.Header.Get("Content-Type"), "text/event-stream") {
+		return &Response{Status: res.StatusCode, Header: res.Header, SetCookies: res.Cookies()}, nil
+	}
 	raw, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
@@ -90,19 +106,21 @@ func (c *Client) Do(method, path string, body []byte, headers map[string]string)
 	return out, nil
 }
 
+// Get sends a GET.
 func (c *Client) Get(path string, headers map[string]string) (*Response, error) {
-	return c.Do("GET", path, nil, headers)
+	return c.Do(http.MethodGet, path, nil, headers)
 }
 
+// PostJSON sends body encoded as JSON in a POST.
 func (c *Client) PostJSON(path string, body any, headers map[string]string) (*Response, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
-	return c.Do("POST", path, raw, headers)
+	return c.Do(http.MethodPost, path, raw, headers)
 }
 
 // PostRaw sends bytes as they are, for a body that is not JSON.
 func (c *Client) PostRaw(path string, body []byte, headers map[string]string) (*Response, error) {
-	return c.Do("POST", path, body, headers)
+	return c.Do(http.MethodPost, path, body, headers)
 }
