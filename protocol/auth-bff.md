@@ -65,7 +65,7 @@ The code set is open: a client handles an unknown code by its status.
 
 Every `POST` on a route with `crosssite` in `needs` runs the check (all own-screens routes, `POST /sign-out` and `POST /me/organizations/check`; `POST /logout` is exempt): when an `Origin` header is present it must equal the application's origin (or the origin of the request's own URL, behind a proxy that rewrites the host); when it is absent, `Sec-Fetch-Site` must be absent or `same-origin`. Otherwise `403 cross_site`. `Referer` is not read.
 
-At `strict`, every mutation (every `POST`) also carries the header `X-Cauthy-Request: 1`; without it the answer is `403 csrf_required`. The header cannot be set cross-site without CORS, so it works as a custom-header CSRF defense.
+At `strict`, every mutation (every `POST`) also carries the header `X-Cauthy-Request: 1`; without it the answer is `403 csrf_required`. The header cannot be set cross-site without CORS, so it works as a custom-header CSRF defense. `POST /logout` is exempt: a plain HTML form signs out.
 
 ## Headers
 
