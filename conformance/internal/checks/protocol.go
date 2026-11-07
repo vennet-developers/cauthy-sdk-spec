@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/client"
 )
 
 // RegisterAll adds every group to the registry, in report order.
@@ -60,16 +61,65 @@ func RegisterProtocol(reg *check.Registry) {
 		return check.Pass("405 with Allow: POST on a POST-only route")
 	}})
 	reg.Add(check.Check{ID: "protocol.no_store", Group: "protocol", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
-		res, err := c.Client.Get("/session", nil)
+		answers, err := sampleAnswers(c)
 		if err != nil {
 			return check.Fail(err.Error())
 		}
-		if !strings.Contains(res.Header.Get("Cache-Control"), "no-store") {
-			return check.Fail(fmt.Sprintf("GET /session Cache-Control=%q, want no-store", res.Header.Get("Cache-Control")))
+		for _, a := range answers {
+			if !strings.Contains(a.res.Header.Get("Cache-Control"), "no-store") {
+				return check.Fail(fmt.Sprintf("%s: Cache-Control=%q, want no-store", a.label, a.res.Header.Get("Cache-Control")))
+			}
+			// Only an answer with a JSON body must say so; the plain-text 404 and 405 and a redirect need not.
+			if a.res.JSON != nil && !strings.HasPrefix(a.res.Header.Get("Content-Type"), "application/json") {
+				return check.Fail(fmt.Sprintf("%s: Content-Type=%q on a JSON answer, want application/json", a.label, a.res.Header.Get("Content-Type")))
+			}
 		}
-		if !strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") {
-			return check.Fail(fmt.Sprintf("GET /session Content-Type=%q, want application/json", res.Header.Get("Content-Type")))
-		}
-		return check.Pass("no-store and JSON on every answer")
+		return check.Pass(fmt.Sprintf("no-store on %d kinds of answer, JSON where the body is JSON", len(answers)))
 	}})
+}
+
+type answer struct {
+	label string
+	res   *client.Response
+}
+
+// sampleAnswers gets one answer of each kind a backend gives: a JSON read, the
+// methods, an error from a POST, the plain-text 404 and 405, and the hosted
+// redirect. The push event stream is left out on purpose: it is text/event-stream.
+func sampleAnswers(c *check.Ctx) ([]answer, error) {
+	hdr := map[string]string{"X-Cauthy-Request": "1"}
+	var out []answer
+	add := func(label string, res *client.Response, err error) error {
+		if err != nil {
+			return fmt.Errorf("%s: %w", label, err)
+		}
+		out = append(out, answer{label, res})
+		return nil
+	}
+	b := c.Client.Fresh()
+	res, err := b.Get("/session", nil)
+	if err := add("GET /session", res, err); err != nil {
+		return nil, err
+	}
+	res, err = b.Get("/methods", nil)
+	if err := add("GET /methods", res, err); err != nil {
+		return nil, err
+	}
+	res, err = b.PostJSON("/sign-in/email", map[string]any{}, hdr)
+	if err := add("POST /sign-in/email with an invalid body", res, err); err != nil {
+		return nil, err
+	}
+	res, err = b.Get("/nope-does-not-exist", nil)
+	if err := add("GET /nope-does-not-exist (404)", res, err); err != nil {
+		return nil, err
+	}
+	res, err = b.Get("/sign-in/email", nil)
+	if err := add("GET /sign-in/email (405)", res, err); err != nil {
+		return nil, err
+	}
+	res, err = b.Get("/login", nil)
+	if err := add("GET /login (redirect)", res, err); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

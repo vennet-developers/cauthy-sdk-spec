@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
@@ -16,6 +17,18 @@ func TestStrictChecks(t *testing.T) {
 	expect(t, reg, "strict.request_header_required", fake.Knobs{}, "fail")
 	expect(t, reg, "strict.next_on_sign_in", fake.Knobs{Strict: true}, "pass")
 	expect(t, reg, "strict.next_on_sign_in", fake.Knobs{}, "fail")
+}
+
+func TestProtocolHeaderIsCheckedOnSeveralAnswers(t *testing.T) {
+	reg := &check.Registry{}
+	RegisterStrict(reg)
+	if d := detailOf(t, reg, "strict.protocol_header", fake.Knobs{}); !strings.Contains(d, "GET /session") {
+		t.Fatalf("detail does not name the first answer: %s", d)
+	}
+	expect(t, reg, "strict.protocol_header", fake.Knobs{Strict: true, NoProtocolOn404: true}, "fail")
+	if d := detailOf(t, reg, "strict.protocol_header", fake.Knobs{Strict: true, NoProtocolOn404: true}); !strings.Contains(d, "GET /nope") {
+		t.Fatalf("detail does not name the 404 answer: %s", d)
+	}
 }
 
 func TestAllRegistersEveryGroup(t *testing.T) {

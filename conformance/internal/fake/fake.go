@@ -5,7 +5,7 @@
 // route gets 400 bad_request, a GET route 401 unauthenticated, and any other
 // method on a POST-only route 405 with Allow: POST. Only paths outside the
 // table answer 404. Unmodeled GETs answer 401 even on routes that need no
-// session (such as /look or /login): a check that needs another answer from
+// session (such as /look): a check that needs another answer from
 // such a route must model the route here first.
 package fake
 
@@ -39,13 +39,23 @@ type Knobs struct {
 	SignInBroken          bool // every sign-in answers 401 invalid_credentials
 	MFARequired           bool // a correct sign-in answers mfa_required, with no session
 	RateLimited           bool // every sign-in answers 429
+	UnknownNot404         bool // a path outside the table answers 200 JSON
+	NoHead                bool // HEAD answers 405
+	LenientJSON           bool // a non-JSON sign-in body is treated as {}
+	CookiePathWrong       bool // the session cookie has Path=/api
+	NoSecure              bool // no Secure on the session cookie even when the application origin is https
+	JSONAsTextPlain       bool // JSON answers carry content-type text/plain
+	NoErrorField          bool // errors never carry "field"
+	NoProtocolOn404       bool // the plain-text 404 lacks Cauthy-Protocol
+	LogoutNotExempt       bool // POST /logout needs X-Cauthy-Request at strict
 }
 
 type Server struct {
 	*httptest.Server
-	Knobs    Knobs
-	Email    string
-	Password string
+	Knobs     Knobs
+	Email     string
+	Password  string
+	appOrigin string // guarded by mu
 
 	mu       sync.Mutex
 	signIns  int             // sessions opened so far
@@ -88,6 +98,7 @@ const prefix = "/api/auth"
 func New(k Knobs) *Server {
 	s := &Server{Knobs: k, Email: "ana@example.com", Password: "correct horse battery staple", signedIn: map[string]bool{}, table: loadTable()}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.handle))
+	s.appOrigin = s.URL
 	return s
 }
 
@@ -104,6 +115,20 @@ func (s *Server) OpenSessions() int {
 	return len(s.signedIn)
 }
 
+// SetAppOrigin changes the origin of the application the fake trusts (default:
+// its own URL). With an https origin the session cookie is Secure.
+func (s *Server) SetAppOrigin(o string) {
+	s.mu.Lock()
+	s.appOrigin = o
+	s.mu.Unlock()
+}
+
+func (s *Server) origin() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.appOrigin
+}
+
 func (s *Server) Target() string { return s.URL + prefix }
 
 func (s *Server) headers(w http.ResponseWriter) {
@@ -117,7 +142,11 @@ func (s *Server) headers(w http.ResponseWriter) {
 
 func (s *Server) write(w http.ResponseWriter, status int, body any) {
 	s.headers(w)
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if s.Knobs.JSONAsTextPlain {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	} else {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	}
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(body)
 }
@@ -125,6 +154,9 @@ func (s *Server) write(w http.ResponseWriter, status int, body any) {
 // text answers the plain-text 404 and 405 of the protocol.
 func (s *Server) text(w http.ResponseWriter, status int, msg string) {
 	s.headers(w)
+	if s.Knobs.NoProtocolOn404 && status == 404 {
+		w.Header().Del("Cauthy-Protocol")
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)
 	w.Write([]byte(msg))
@@ -132,7 +164,7 @@ func (s *Server) text(w http.ResponseWriter, status int, msg string) {
 
 func (s *Server) problem(w http.ResponseWriter, status int, code, message, field string) {
 	e := map[string]any{"code": code, "message": message}
-	if field != "" {
+	if field != "" && !s.Knobs.NoErrorField {
 		e["field"] = field
 	}
 	if s.Knobs.ErrorFlat {
@@ -143,7 +175,11 @@ func (s *Server) problem(w http.ResponseWriter, status int, code, message, field
 }
 
 func (s *Server) setSession(w http.ResponseWriter, value string, persistent bool) {
-	c := &http.Cookie{Name: "cauthy_session.0", Value: value, Path: "/", HttpOnly: !s.Knobs.NoHttpOnly}
+	c := &http.Cookie{Name: "cauthy_session.0", Value: value, Path: "/", HttpOnly: !s.Knobs.NoHttpOnly,
+		Secure: strings.HasPrefix(s.origin(), "https://") && !s.Knobs.NoSecure}
+	if s.Knobs.CookiePathWrong {
+		c.Path = "/api"
+	}
 	if !s.Knobs.NoSameSite {
 		c.SameSite = http.SameSiteLaxMode
 	}
@@ -192,7 +228,7 @@ func (s *Server) crossSite(r *http.Request) bool {
 	}
 	origin := r.Header.Get("Origin")
 	if origin != "" {
-		return origin != s.URL
+		return origin != s.origin()
 	}
 	site := r.Header.Get("Sec-Fetch-Site")
 	return site != "" && site != "same-origin"
@@ -243,11 +279,19 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 	method := r.Method
+	if method == http.MethodHead && s.Knobs.NoHead {
+		s.text(w, 405, "Method not allowed")
+		return
+	}
 	if method == http.MethodHead {
 		method = http.MethodGet
 	}
 	methods := s.methodsFor(path)
 	if methods == nil {
+		if s.Knobs.UnknownNot404 {
+			s.write(w, 200, map[string]any{"status": "ok"})
+			return
+		}
 		s.text(w, 404, "Not found")
 		return
 	}
@@ -270,7 +314,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// POST /logout is exempt: a plain HTML form signs out and cannot add headers.
-		if s.Knobs.Strict && route.ID != "hosted.logout_post" && r.Header.Get("X-Cauthy-Request") != "1" {
+		if s.Knobs.Strict && (route.ID != "hosted.logout_post" || s.Knobs.LogoutNotExempt) && r.Header.Get("X-Cauthy-Request") != "1" {
 			s.problem(w, 403, "csrf_required", "X-Cauthy-Request: 1 is required", "")
 			return
 		}
@@ -282,6 +326,11 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		} else {
 			s.write(w, 200, map[string]any{"session": nil, "status": "unauthenticated"})
 		}
+	case "GET /login":
+		// The hosted sign-in: a redirect to Cauthy.
+		s.headers(w)
+		w.Header().Set("Location", "https://auth.example/authorize")
+		w.WriteHeader(302)
 	case "GET /methods":
 		m := map[string]any{"providers": []any{}, "passwordSignIn": true, "signUp": true, "magicLink": false,
 			"passkey": false, "passkeyHere": false, "passkeyOnCauthy": false, "sso": false}
@@ -296,6 +345,11 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		var body map[string]any
 		if json.NewDecoder(r.Body).Decode(&body) != nil || body == nil {
+			if s.Knobs.LenientJSON {
+				body = map[string]any{}
+			}
+		}
+		if body == nil {
 			s.problem(w, 400, "bad_request", "A JSON object is required", "")
 			return
 		}

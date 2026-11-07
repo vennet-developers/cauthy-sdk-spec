@@ -10,15 +10,17 @@ var validNext = map[string]bool{"done": true, "mfa": true, "verify_email": true,
 
 func RegisterStrict(reg *check.Registry) {
 	reg.Add(check.Check{ID: "strict.protocol_header", Group: "strict", Level: check.Strict, Run: func(c *check.Ctx) check.Result {
-		res, err := c.Client.Fresh().Get("/session", nil)
+		answers, err := sampleAnswers(c)
 		if err != nil {
 			return check.Fail(err.Error())
 		}
 		want := fmt.Sprint(c.Table.Version)
-		if got := res.Header.Get("Cauthy-Protocol"); got != want {
-			return check.Fail(fmt.Sprintf("Cauthy-Protocol=%q, want %q", got, want))
+		for _, a := range answers {
+			if got := a.res.Header.Get("Cauthy-Protocol"); got != want {
+				return check.Fail(fmt.Sprintf("%s: Cauthy-Protocol=%q, want %q", a.label, got, want))
+			}
 		}
-		return check.Pass("Cauthy-Protocol: " + want)
+		return check.Pass(fmt.Sprintf("Cauthy-Protocol: %s on %d kinds of answer", want, len(answers)))
 	}})
 	reg.Add(check.Check{ID: "strict.request_header_required", Group: "strict", Level: check.Strict, Run: func(c *check.Ctx) check.Result {
 		res, err := c.Client.Fresh().PostJSON("/sign-in/email", map[string]any{"email": "a@example.com", "password": "x"}, map[string]string{"X-Cauthy-Request": ""})

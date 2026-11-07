@@ -12,6 +12,8 @@ func TestErrorAndCSRFChecks(t *testing.T) {
 	RegisterErrors(reg)
 	RegisterCSRF(reg)
 	expect(t, reg, "errors.not_json_is_bad_request", fake.Knobs{}, "pass")
+	expect(t, reg, "errors.not_json_is_bad_request", fake.Knobs{LenientJSON: true}, "fail")
+	expect(t, reg, "errors.validation_names_field", fake.Knobs{NoErrorField: true}, "fail")
 	expect(t, reg, "errors.shape", fake.Knobs{}, "pass")
 	expect(t, reg, "errors.shape", fake.Knobs{ErrorFlat: true}, "fail")
 	expect(t, reg, "errors.validation_names_field", fake.Knobs{}, "pass")

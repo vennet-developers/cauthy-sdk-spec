@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/client"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/fake"
 )
 
@@ -86,5 +87,35 @@ func TestARunSignsInAtMostThreeTimesAndLeavesNoSession(t *testing.T) {
 	}
 	if n := srv.OpenSessions(); n != 0 {
 		t.Errorf("a run left %d sessions open", n)
+	}
+}
+
+func TestCookieAttributeProofs(t *testing.T) {
+	reg := sessionRegistry()
+	expect(t, reg, "session.cookie_attributes", fake.Knobs{CookiePathWrong: true}, "fail")
+}
+
+// httpsRun runs one check against a fake that trusts an https application origin.
+func httpsRun(t *testing.T, reg *check.Registry, id string, k fake.Knobs) check.Result {
+	t.Helper()
+	ctx, srv := ctxFor(t, k)
+	srv.SetAppOrigin("https://app.example")
+	ctx.Client = client.New(srv.Target(), "https://app.example")
+	for _, c := range reg.All() {
+		if c.ID == id {
+			return c.Run(ctx)
+		}
+	}
+	t.Fatalf("no check %s", id)
+	return check.Result{}
+}
+
+func TestSecureIsRequiredOnAnHTTPSOrigin(t *testing.T) {
+	reg := sessionRegistry()
+	if r := httpsRun(t, reg, "session.cookie_attributes", fake.Knobs{}); r.Status != "pass" {
+		t.Fatalf("a Secure cookie on https: %s %s", r.Status, r.Detail)
+	}
+	if r := httpsRun(t, reg, "session.cookie_attributes", fake.Knobs{NoSecure: true}); r.Status != "fail" {
+		t.Fatalf("no Secure on https must fail: %s %s", r.Status, r.Detail)
 	}
 }

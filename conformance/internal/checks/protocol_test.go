@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
@@ -23,4 +24,29 @@ func TestProtocolChecks(t *testing.T) {
 	expect(t, reg, "protocol.get_on_post_is_405", fake.Knobs{HeadNot405: true}, "fail")
 	expect(t, reg, "protocol.no_store", fake.Knobs{}, "pass")
 	expect(t, reg, "protocol.no_store", fake.Knobs{NoCacheControl: true}, "fail")
+}
+
+func TestProtocolChecksFailProofs(t *testing.T) {
+	reg := protocolRegistry()
+	expect(t, reg, "protocol.unknown_is_404", fake.Knobs{UnknownNot404: true}, "fail")
+	expect(t, reg, "protocol.head_as_get", fake.Knobs{NoHead: true}, "fail")
+	expect(t, reg, "protocol.no_store", fake.Knobs{JSONAsTextPlain: true}, "fail")
+}
+
+func detailOf(t *testing.T, reg *check.Registry, id string, k fake.Knobs) string {
+	t.Helper()
+	ctx, _ := ctxFor(t, k)
+	for _, c := range reg.All() {
+		if c.ID == id {
+			return c.Run(ctx).Detail
+		}
+	}
+	t.Fatalf("no check %s", id)
+	return ""
+}
+
+func TestNoStoreNamesTheFirstAnswerThatLacksIt(t *testing.T) {
+	if d := detailOf(t, protocolRegistry(), "protocol.no_store", fake.Knobs{NoCacheControl: true}); !strings.Contains(d, "GET /session") {
+		t.Fatalf("detail does not name the answer: %s", d)
+	}
 }
