@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"maps"
 	"strings"
@@ -34,7 +35,7 @@ func person() map[string]any {
 	return map[string]any{
 		"iss": Issuer, "aud": []string{Audience}, "sub": Subject, "tid": Tenant, "jti": JTI,
 		"iat": Now - 60, "exp": Now + 840, "auth_time": Now - 60,
-		"roles": []string{"member"}, "email": "ada@example.com",
+		"roles": []string{"member"}, "email": "ada@example.com", "email_verified": true,
 	}
 }
 
@@ -95,11 +96,20 @@ func Cases(k Keys) []vectors.Case {
 	guest := with(person(), "email", nil, "anon", true)
 	attackerJWK := publicOf(k, KidAttacker, KidA, "sig")
 	customDomain := signed(with(person(), "iss", CustomIssuer))
+	// dupPayload is person() with sub written twice, the first one another's.
+	personJSON, _ := json.Marshal(person())
+	dupPayload := []byte(`{"sub":"` + OtherTenant + `",` + string(personJSON[1:]))
+	dupHeader := []byte(`{"alg":"none","alg":"RS256","kid":"` + KidA + `","typ":"JWT"}`)
+	shortSig := jws.Join(parts[0], parts[1], make([]byte, 10))
+	longSig := jws.Join(parts[0], parts[1], make([]byte, 300))
+	mid := len(parts[2]) / 2
 
 	cases := []vectors.Case{
 		valid("valid/person", "-", "A person's token as Cauthy issues it", good),
 		valid("valid/previous-key", "R5", "Signed with the previous key, still published during a rotation", jws.RS256(k[KidB], header(KidB), person())),
 		valid("valid/typ-absent", "R4", "No typ header: a verifier does not require one", jws.RS256(a, with(header(KidA), "typ", nil), person())),
+		valid("valid/typ-at-jwt", "R4", "typ at+jwt, in lower case", jws.RS256(a, with(header(KidA), "typ", "at+jwt"), person())),
+		valid("valid/typ-lower-case", "R4", "typ jwt in lower case: typ is compared without regard to case", jws.RS256(a, with(header(KidA), "typ", "jwt"), person())),
 		valid("valid/aud-string", "R10", "aud as a single string", signed(with(person(), "aud", Audience))),
 		valid("valid/aud-among-several", "R10", "aud lists the audience among others", signed(with(person(), "aud", []string{"https://other.example.com", Audience}))),
 		valid("valid/roles-null", "R8", "roles is null: no roles", signed(with(person(), "roles", null{}))),
@@ -127,6 +137,10 @@ func Cases(k Keys) []vectors.Case {
 		invalid("shape/header-not-json", "R2", "The header is not JSON", raw([]byte("not json"), []byte(`{}`)), verify.Malformed),
 		invalid("shape/header-array", "R2", "The header is a JSON array", raw([]byte(`["RS256"]`), []byte(`{}`)), verify.Malformed),
 		invalid("shape/payload-not-json", "R2", "The payload is not JSON, under a valid signature", raw([]byte(`{"alg":"RS256","kid":"`+KidA+`","typ":"JWT"}`), []byte("not json")), verify.Malformed),
+		invalid("shape/newline-in-signature", "R2", "A line break inside the signature segment, which some base64 decoders skip", parts[0]+"."+parts[1]+"."+parts[2][:mid]+"\n"+parts[2][mid:], verify.Malformed),
+		invalid("shape/trailing-crlf", "R2", "A carriage return and a line feed after the token", good+"\r\n", verify.Malformed),
+		invalid("shape/duplicate-header-key", "R2", "alg appears twice in the header, under a valid signature", raw(dupHeader, personJSON), verify.Malformed),
+		invalid("shape/duplicate-claim", "R2", "sub appears twice in the payload, under a valid signature", raw([]byte(`{"alg":"RS256","kid":"`+KidA+`","typ":"JWT"}`), dupPayload), verify.Malformed),
 
 		invalid("alg/none", "R3", "alg none with an empty signature", jws.Segment(with(header(KidA), "alg", "none"))+"."+parts[1]+".", verify.AlgNotAllowed),
 		invalid("alg/missing", "R3", "No alg header", jws.RS256(a, with(header(KidA), "alg", nil), person()), verify.AlgNotAllowed),
@@ -135,11 +149,15 @@ func Cases(k Keys) []vectors.Case {
 		invalid("alg/rs512", "R3", "RS512 with the real key", withAlg("RS512", crypto.SHA512), verify.AlgNotAllowed),
 		invalid("alg/ps256", "R3", "PS256 named in the header", withAlg("PS256", crypto.SHA256), verify.AlgNotAllowed),
 		invalid("alg/es256", "R3", "ES256 named in the header", jws.Join(jws.Segment(with(header(KidA), "alg", "ES256")), parts[1], make([]byte, 64)), verify.AlgNotAllowed),
+		invalid("alg/lower-case", "R3", "alg rs256 in lower case: the name is compared exactly", jws.RS256(a, with(header(KidA), "alg", "rs256"), person()), verify.AlgNotAllowed),
 
 		invalid("header/crit", "R4", "A crit header the verifier cannot honour", jws.RS256(a, with(header(KidA), "crit", []string{"exp"}), person()), verify.UnsupportedHeader),
+		invalid("header/typ-webhook", "R4", "typ cauthy-webhook+jwt: a webhook's JWT is not an access token", jws.RS256(a, with(header(KidA), "typ", "cauthy-webhook+jwt"), person()), verify.UnsupportedHeader),
+		invalid("header/typ-not-string", "R4", "typ is a number", jws.RS256(a, with(header(KidA), "typ", 1), person()), verify.UnsupportedHeader),
 
 		invalid("kid/missing", "R5", "No kid header", jws.RS256(a, with(header(KidA), "kid", nil), person()), verify.MissingKid),
 		invalid("kid/empty", "R5", "An empty kid", jws.RS256(a, header(""), person()), verify.MissingKid),
+		invalid("kid/number", "R5", "kid is a number", jws.RS256(a, with(header(KidA), "kid", 1), person()), verify.MissingKid),
 		invalid("kid/unknown", "R5", "A kid the issuer never published", jws.RS256(k[KidAttacker], header(KidAttacker), person()), verify.UnknownKid),
 		invalid("kid/jku-ignored", "R4", "jku points at the attacker's set; it is never fetched", jws.RS256(k[KidAttacker], with(header(KidAttacker), "jku", "https://attacker.example.com/jwks.json"), person()), verify.UnknownKid),
 		invalid("kid/encryption-key", "R5", "The kid names a published key whose use is enc", jws.RS256(k[KidAttacker], header(KidEnc), person()), verify.UnknownKid),
@@ -149,6 +167,8 @@ func Cases(k Keys) []vectors.Case {
 		invalid("sig/embedded-jwk", "R4", "The header carries the signer's own key; it is never used", jws.RS256(k[KidAttacker], with(header(KidA), "jwk", attackerJWK), person()), verify.BadSignature),
 		invalid("sig/tampered-payload", "R6", "The payload was changed after signing", parts[0]+"."+tampered+"."+parts[2], verify.BadSignature),
 		invalid("sig/empty", "R6", "RS256 with an empty signature", parts[0]+"."+parts[1]+".", verify.BadSignature),
+		invalid("sig/too-short", "R6", "A 10-byte signature segment", shortSig, verify.BadSignature),
+		invalid("sig/too-long", "R6", "A 300-byte signature segment", longSig, verify.BadSignature),
 
 		invalid("claims/missing-iss", "R7", "No iss", signed(with(person(), "iss", nil)), verify.MissingClaim),
 		invalid("claims/missing-sub", "R7", "No sub", signed(with(person(), "sub", nil)), verify.MissingClaim),
@@ -163,6 +183,15 @@ func Cases(k Keys) []vectors.Case {
 		invalid("claims/aud-empty", "R8", "aud is an empty array", signed(with(person(), "aud", []string{})), verify.InvalidClaim),
 		invalid("claims/roles-string", "R8", "roles is a string", signed(with(person(), "roles", "admin")), verify.InvalidClaim),
 		invalid("claims/anon-string", "R8", "anon is the string \"true\"", signed(with(person(), "anon", "true")), verify.InvalidClaim),
+		invalid("claims/aud-null-element", "R8", "aud holds the audience and a null", signed(with(person(), "aud", []any{Audience, null{}})), verify.InvalidClaim),
+		invalid("claims/aud-number-element", "R8", "aud holds a number beside the audience", signed(with(person(), "aud", []any{1, Audience})), verify.InvalidClaim),
+		invalid("claims/roles-null-element", "R8", "roles holds a null", signed(with(person(), "roles", []any{"member", null{}})), verify.InvalidClaim),
+		invalid("claims/roles-number-element", "R8", "roles holds a number", signed(with(person(), "roles", []any{1})), verify.InvalidClaim),
+		invalid("claims/iat-string", "R8", "iat is a string", signed(with(person(), "iat", "1767225540")), verify.InvalidClaim),
+		invalid("claims/nbf-string", "R8", "nbf is a string", signed(with(person(), "nbf", "1767225540")), verify.InvalidClaim),
+		invalid("claims/exp-fractional", "R8", "exp is not an integer", signed(with(person(), "exp", float64(Now+840)+0.5)), verify.InvalidClaim),
+		invalid("claims/exp-too-large", "R8", "exp beyond 2^53", signed(with(person(), "exp", int64(1)<<53+1)), verify.InvalidClaim),
+		invalid("claims/email-verified-string", "R8", "email_verified is the string \"true\"", signed(with(person(), "email_verified", "true")), verify.InvalidClaim),
 
 		invalid("iss/other", "R9", "Another issuer", signed(with(person(), "iss", "https://attacker.example.com")), verify.WrongIssuer),
 		invalid("iss/trailing-slash", "R9", "The issuer with a trailing slash", signed(with(person(), "iss", Issuer+"/")), verify.WrongIssuer),
@@ -187,6 +216,8 @@ func Cases(k Keys) []vectors.Case {
 
 		invalid("system/system-token", "R13", "A system's own token", signed(system), verify.SystemToken),
 		invalid("system/sys-empty", "R13", "sys present and empty", signed(with(person(), "sys", "")), verify.SystemToken),
+		invalid("system/sys-null", "R13", "sys present as null: its presence is what counts", signed(with(person(), "sys", null{})), verify.SystemToken),
+		invalid("system/sys-false", "R13", "sys present as false", signed(with(person(), "sys", false)), verify.SystemToken),
 
 		invalid("anonymous/guest", "R14", "A guest's token where the backend expects a person", signed(guest), verify.AnonymousToken),
 	}

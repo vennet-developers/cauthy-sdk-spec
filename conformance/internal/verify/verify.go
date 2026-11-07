@@ -9,18 +9,21 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // Identity is what a verified token says.
 type Identity struct {
-	Subject   string
-	Tenant    string
-	Email     string
-	Roles     []string
-	Anonymous bool
-	ExpiresAt time.Time
+	Subject string
+	Tenant  string
+	Email   string
+	// EmailVerified is the token's email_verified claim; false when absent.
+	EmailVerified bool
+	Roles         []string
+	Anonymous     bool
+	ExpiresAt     time.Time
 }
 
 var b64 = base64.RawURLEncoding.Strict()
@@ -33,7 +36,15 @@ func (v *Verifier) Verify(ctx context.Context, token string, now time.Time) (*Id
 		return nil, refuse(TooLarge, "%d bytes, at most %d", len(token), MaxTokenBytes)
 	}
 
-	// R2 — three base64url segments; the header a JSON object.
+	// R2 — only base64url characters and the dots: Go's base64 decoder would
+	// skip a line break, and a lenient parser elsewhere must not see a
+	// different token than this one signed.
+	for i := 0; i < len(token); i++ {
+		if !tokenByte(token[i]) {
+			return nil, refuse(Malformed, "byte %d is not a base64url character or a dot", i)
+		}
+	}
+	// Three segments; the header a JSON object with no repeated name.
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return nil, refuse(Malformed, "%d segments, want 3", len(parts))
@@ -48,6 +59,9 @@ func (v *Verifier) Verify(ctx context.Context, token string, now time.Time) (*Id
 	if err := json.Unmarshal(headerRaw, &header); err != nil || header == nil {
 		return nil, refuse(Malformed, "the header is not a JSON object")
 	}
+	if repeatsAName(headerRaw) {
+		return nil, refuse(Malformed, "the header repeats a name")
+	}
 
 	// R3 — the algorithm is fixed by the verifier, never chosen by the token.
 	var alg string
@@ -55,9 +69,16 @@ func (v *Verifier) Verify(ctx context.Context, token string, now time.Time) (*Id
 		return nil, refuse(AlgNotAllowed, "alg must be RS256")
 	}
 
-	// R4 — no critical extensions; key-carrying headers are never read.
+	// R4 — no critical extensions; key-carrying headers are never read; a
+	// typ, when present, says this is an access token.
 	if _, ok := header["crit"]; ok {
 		return nil, refuse(UnsupportedHeader, "crit is not supported")
+	}
+	if raw, ok := header["typ"]; ok {
+		var typ string
+		if json.Unmarshal(raw, &typ) != nil || !(strings.EqualFold(typ, "JWT") || strings.EqualFold(typ, "at+jwt")) {
+			return nil, refuse(UnsupportedHeader, "typ must be JWT or at+jwt")
+		}
 	}
 
 	// R5 — the key comes from the issuer's set, by kid.
@@ -83,6 +104,9 @@ func (v *Verifier) Verify(ctx context.Context, token string, now time.Time) (*Id
 	var claims map[string]json.RawMessage
 	if err := json.Unmarshal(payloadRaw, &claims); err != nil || claims == nil {
 		return nil, refuse(Malformed, "the payload is not a JSON object")
+	}
+	if repeatsAName(payloadRaw) {
+		return nil, refuse(Malformed, "the payload repeats a name")
 	}
 
 	// R7 — required claims.
@@ -138,7 +162,7 @@ func (v *Verifier) Verify(ctx context.Context, token string, now time.Time) (*Id
 
 	sec := int64(c.exp)
 	return &Identity{
-		Subject: c.sub, Tenant: c.tid, Email: c.email, Roles: c.roles, Anonymous: c.anon,
+		Subject: c.sub, Tenant: c.tid, Email: c.email, EmailVerified: c.emailVerified, Roles: c.roles, Anonymous: c.anon,
 		ExpiresAt: time.Unix(sec, int64((c.exp-float64(sec))*1e9)).UTC(),
 	}, nil
 }
@@ -149,11 +173,84 @@ type readClaimSet struct {
 	exp, iat             float64
 	nbf                  *float64
 	anon, sys            bool
+	emailVerified        bool
+}
+
+// tokenByte reports whether b may appear in a compact JWS: base64url
+// characters and the dots between segments.
+func tokenByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '-' || b == '_' || b == '.'
+}
+
+// repeatsAName reports whether any JSON object in raw has the same name twice.
+// raw is already known to be valid JSON.
+func repeatsAName(raw []byte) bool {
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	var walk func() bool
+	walk = func() bool {
+		tok, err := dec.Token()
+		if err != nil {
+			return false
+		}
+		switch tok {
+		case json.Delim('{'):
+			seen := map[string]bool{}
+			for dec.More() {
+				name, _ := dec.Token()
+				key, _ := name.(string)
+				if seen[key] {
+					return true
+				}
+				seen[key] = true
+				if walk() {
+					return true
+				}
+			}
+			dec.Token()
+		case json.Delim('['):
+			for dec.More() {
+				if walk() {
+					return true
+				}
+			}
+			dec.Token()
+		}
+		return false
+	}
+	return walk()
+}
+
+// maxSafeInteger is 2^53: the largest integer every JSON implementation reads
+// exactly.
+const maxSafeInteger = 1 << 53
+
+// numericDate reads a NumericDate: a JSON integer within ±2^53.
+func numericDate(raw json.RawMessage) (float64, bool) {
+	v, err := strconv.ParseInt(string(raw), 10, 64)
+	if err != nil || v > maxSafeInteger || v < -maxSafeInteger {
+		return 0, false
+	}
+	return float64(v), true
+}
+
+// stringList reads a JSON array whose every element is a string.
+func stringList(raw json.RawMessage) ([]string, bool) {
+	var elems []json.RawMessage
+	if json.Unmarshal(raw, &elems) != nil || elems == nil {
+		return nil, false
+	}
+	out := make([]string, len(elems))
+	for i, e := range elems {
+		if len(e) == 0 || e[0] != '"' || json.Unmarshal(e, &out[i]) != nil {
+			return nil, false
+		}
+	}
+	return out, true
 }
 
 // readClaims checks the type of every claim the rules name (R8). A claim the
 // rules name may not be null, except roles. Claims the rules do not name are
-// ignored.
+// ignored; sys is not read at all, because its presence is what R13 refuses.
 func readClaims(m map[string]json.RawMessage) (*readClaimSet, error) {
 	c := &readClaimSet{}
 	bad := func(name string) error { return refuse(InvalidClaim, "%s has the wrong type or format", name) }
@@ -161,17 +258,6 @@ func readClaims(m map[string]json.RawMessage) (*readClaimSet, error) {
 	into := func(name string, v any) bool {
 		raw := m[name]
 		return string(raw) != "null" && json.Unmarshal(raw, v) == nil
-	}
-	// num decodes a JSON number. json.Number would also take "123" quoted,
-	// which a NumericDate is not.
-	num := func(name string, f *float64) bool {
-		var n json.Number
-		if strings.HasPrefix(string(m[name]), `"`) || !into(name, &n) {
-			return false
-		}
-		v, err := n.Float64()
-		*f = v
-		return err == nil
 	}
 
 	if !into("iss", &c.iss) {
@@ -186,37 +272,39 @@ func readClaims(m map[string]json.RawMessage) (*readClaimSet, error) {
 	var one string
 	if into("aud", &one) {
 		c.aud = []string{one}
-	} else if !into("aud", &c.aud) || len(c.aud) == 0 {
+	} else if aud, ok := stringList(m["aud"]); !ok || len(aud) == 0 {
 		return nil, bad("aud")
+	} else {
+		c.aud = aud
 	}
-	if !num("exp", &c.exp) {
+	var ok bool
+	if c.exp, ok = numericDate(m["exp"]); !ok {
 		return nil, bad("exp")
 	}
-	if !num("iat", &c.iat) {
+	if c.iat, ok = numericDate(m["iat"]); !ok {
 		return nil, bad("iat")
 	}
-	if _, ok := m["nbf"]; ok {
-		var nbf float64
-		if !num("nbf", &nbf) {
+	if raw, present := m["nbf"]; present {
+		nbf, ok := numericDate(raw)
+		if !ok {
 			return nil, bad("nbf")
 		}
 		c.nbf = &nbf
 	}
-	if _, ok := m["email"]; ok && !into("email", &c.email) {
+	if _, present := m["email"]; present && !into("email", &c.email) {
 		return nil, bad("email")
 	}
-	if raw, ok := m["roles"]; ok && string(raw) != "null" && !into("roles", &c.roles) {
-		return nil, bad("roles")
+	if _, present := m["email_verified"]; present && !into("email_verified", &c.emailVerified) {
+		return nil, bad("email_verified")
 	}
-	if _, ok := m["anon"]; ok && !into("anon", &c.anon) {
+	if raw, present := m["roles"]; present && string(raw) != "null" {
+		if c.roles, ok = stringList(raw); !ok {
+			return nil, bad("roles")
+		}
+	}
+	if _, present := m["anon"]; present && !into("anon", &c.anon) {
 		return nil, bad("anon")
 	}
-	if _, ok := m["sys"]; ok {
-		var s string
-		if !into("sys", &s) {
-			return nil, bad("sys")
-		}
-		c.sys = true
-	}
+	_, c.sys = m["sys"]
 	return c, nil
 }

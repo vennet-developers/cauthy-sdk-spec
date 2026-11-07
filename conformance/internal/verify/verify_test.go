@@ -125,3 +125,14 @@ func TestVerifyWithNoLeewayAtAll(t *testing.T) {
 		t.Fatalf("exp is now: want expired, got %v", err)
 	}
 }
+
+func TestVerifyReportsEmailVerified(t *testing.T) {
+	id, err := verifier(t, nil).Verify(context.Background(), token(t, map[string]any{"email_verified": true}), now)
+	if err != nil || !id.EmailVerified {
+		t.Fatalf("%+v, %v", id, err)
+	}
+	id, err = verifier(t, nil).Verify(context.Background(), token(t, nil), now)
+	if err != nil || id.EmailVerified {
+		t.Fatalf("absent must read false: %+v, %v", id, err)
+	}
+}
