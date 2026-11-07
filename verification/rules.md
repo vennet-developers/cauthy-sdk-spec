@@ -17,9 +17,10 @@ An access token is a JWS in compact form, signed RS256.
 | `nbf` | Never written. A verifier still honours it when present |
 | `jti` | A UUID, by which Cauthy revokes the token on its side |
 | `roles` | The person's role slugs in the workspace; may be empty or `null` |
-| `email` | The person's address; absent on a guest's token |
+| `email`, `email_verified` | The person's address, and whether Cauthy had verified it when the token was issued (a boolean); both absent on a guest's token. A token issued before Cauthy wrote `email_verified` lacks it: read it as `false` |
 | `anon` | `true` on a guest's token |
 | `sys`, `sys_import` | Present only on a system's own token |
+| (none) | A machine-to-machine token, issued for a `client_credentials` grant, has `sub` = the client's id, the client's roles and no `email`, and is otherwise indistinguishable from a person's token today. Nothing in it says it is not a person. A later Cauthy version will mark it with a claim of its own; until then a backend that must tell the two apart keeps its own list of client ids. Rule R13 will refuse the mark when it exists, as it refuses `sys` |
 | `auth_time`, `keep` | When the session began, and whether it is a long one |
 | `custom`, `scope`, `client_id`, `act` | Present on some tokens; ignored by these rules |
 
@@ -29,11 +30,11 @@ The keys are published at `<issuer>/.well-known/jwks.json`: every active key as 
 
 | Setting | Rule |
 | --- | --- |
-| `issuer` | Required. `https://` (`http://` only for `localhost` and `127.0.0.1`), no trailing slash, no query or fragment. The JWKS URL is derived from it; it is never read from a token |
+| `issuer` | Required. `https://` (`http://` only for `localhost`, `127.0.0.1`, `*.localhost` and `*.test`), no trailing slash, no query or fragment. The JWKS URL, `<issuer>/.well-known/jwks.json`, is derived from it; it is never read from a token |
 | `issuers` | Optional list of further issuers a token may name, each following the same format rules as `issuer`. A workspace with a custom domain lists the domain's origin here, because its tokens carry either Cauthy's issuer or the domain's, depending on where the person signed in. The keys always come from `issuer`'s set; no issuer in this list is ever fetched. Default: empty, so exactly one issuer is accepted |
 | `audience` | Required |
 | `tenant` | Required: the workspace id, a lowercase UUID, not the nil UUID. A verifier without a tenant does not start |
-| `leeway` | Clock tolerance. Default 30 seconds; 0 to 60 accepted |
+| `leeway` | Clock tolerance. Default 30 seconds when unset; 0 to 60 accepted, and an explicit 0 means none |
 | `allow_anonymous` | Whether a guest's token is accepted. Default `false` |
 
 A configuration that breaks a rule is an error when the verifier is built, before it verifies anything.
@@ -45,18 +46,18 @@ The rules run in this order, and a token is refused at the first one it breaks, 
 | Rule | Check | Reason when it fails |
 | --- | --- | --- |
 | R1 | The token is at most 8192 bytes. Checked before anything is decoded | `too_large` |
-| R2 | Three segments separated by `.`, each base64url without padding; the header a JSON object | `malformed` |
+| R2 | Only the bytes `A-Z a-z 0-9 - _` and the two dots (so no line break, space or padding); three segments separated by `.`, each base64url without padding; the header a JSON object; no JSON object, in the header or the payload, repeats a name | `malformed` |
 | R3 | The header's `alg` is exactly `RS256`. The algorithm is fixed by the verifier, never chosen by the token: `none`, `HS256` (including one keyed with the published public key), `RS384`, `RS512`, `PS256`, `ES256` and a missing `alg` are all refused | `alg_not_allowed` |
-| R4 | No `crit` header. `jku`, `x5u`, `jwk` and `x5c` are never used to find a key; `typ` is not required | `unsupported_header` |
+| R4 | No `crit` header. `jku`, `x5u`, `jwk` and `x5c` are never used to find a key. `typ` is not required, but when present it is the string `JWT` or `at+jwt`, in any case: another type, such as the `cauthy-webhook+jwt` of Cauthy's webhooks, is not an access token | `unsupported_header` |
 | R5 | `kid` is a non-empty string, and the issuer's set has a usable key with that `kid`. A key is usable when `kty` is `RSA`, `use` is `sig` or absent, and `alg` is `RS256` or absent; a usable key under 2048 bits is refused on its own reason | `missing_kid`, `unknown_kid`, `weak_key` |
 | R6 | The RSASSA-PKCS1-v1_5 SHA-256 signature verifies over the first two segments exactly as received | `bad_signature` |
 | R7 | The payload is a JSON object (else `malformed`) and has `iss`, `sub`, `aud`, `exp`, `iat` and `tid` | `missing_claim` |
-| R8 | `iss` is a string; `sub` and `tid` are lowercase UUIDs; `aud` is a string or a non-empty array of strings; `exp`, `iat` and `nbf` are JSON numbers; `roles` is an array of strings or `null`; `email` and `sys` are strings; `anon` is a boolean. None of them is `null` except `roles`. Claims not named here are ignored | `invalid_claim` |
+| R8 | `iss` is a string; `sub` and `tid` are lowercase UUIDs; `aud` is a string or a non-empty array in which every element is a string; `exp`, `iat` and `nbf` are JSON integers within ±2^53 (not strings, not fractions); `roles` is an array in which every element is a string, or `null`; `email` is a string; `email_verified` and `anon` are booleans. None of them is `null` except `roles`, and no array element is `null`. Claims not named here are ignored, `sys` among them (R13 only looks for it) | `invalid_claim` |
 | R9 | `iss` equals the configured `issuer` or one of the configured `issuers`, byte for byte: no trimming, no case folding | `wrong_issuer` |
 | R10 | `aud` equals the configured audience, or, as an array, contains it | `wrong_audience` |
 | R11 | With leeway L: refused when now ≥ `exp` + L; when `nbf` is present and now < `nbf` − L; when now < `iat` − L | `expired`, `not_yet_valid`, `issued_in_future` |
 | R12 | `tid` equals the configured tenant | `wrong_tenant` |
-| R13 | No `sys` claim, whatever its value. A system's own token never stands for a person | `system_token` |
+| R13 | No `sys` claim, whatever its value, `null` and `false` included: its presence is the mark. A system's own token never stands for a person | `system_token` |
 | R14 | `anon` is not `true`, unless the backend allows guests | `anonymous_token` |
 
 ## Keys and refetching
@@ -74,7 +75,8 @@ The rules run in this order, and a token is refused at the first one it breaks, 
 
 - **Revocation.** Cauthy revokes a token by its `jti` on its own side; a verifier that works offline cannot see that, and accepts the token until `exp`. A backend that must see a sign-out at once asks Cauthy instead.
 - **Business roles.** `roles` are workspace-wide; see [`identity/rules.md`](../identity/rules.md).
-- **A verified address.** The token carries no `email_verified`; see [`identity/rules.md`](../identity/rules.md).
+- **A verified address, now.** `email_verified` is what Cauthy knew when it issued the token, up to 15 minutes ago; see [`identity/rules.md`](../identity/rules.md).
+- **A machine.** A machine-to-machine token passes as a person's today; see the table above.
 
 ## Reason codes
 
@@ -109,7 +111,7 @@ The list is closed: a verifier reports one of these and no other, and the vector
 | `vectors/jwks.json` | The set a verifier loads: the current key, the previous key, a 1024-bit key, and a key published with `use: enc` |
 | `vectors/tokens.json` | Every case: `name`, `rule`, `description`, `token`, `now` (seconds since the epoch), `config` (`issuer`, `audience`, `tenant`, and `issuers` and `allow_anonymous` when set), `expect` (`valid` or `invalid`) and, for an invalid one, `reason` |
 
-Every case breaks one rule at most, so the reason is the same whatever order a verifier runs its checks in. The vectors assume the default leeway (30 seconds) and the 8192-byte limit; a case at a boundary says so in its description.
+Every case is built to be accepted, or to be refused by one rule only, so the reason is the same whatever order a verifier runs its checks in. The vectors assume the default leeway (30 seconds) and the 8192-byte limit; a case at a boundary says so in its description.
 
 Both files are generated, and the same keys always give the same bytes:
 

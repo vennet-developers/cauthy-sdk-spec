@@ -20,7 +20,7 @@ A person is `sub`, a UUID Cauthy never reuses. An application keys its own rows 
 
 The session's `user.emailVerified` says which case a person is in, and `GET /v1/oauth/userinfo` answers `email_verified`, `email_verify_by` (UTC) and `restricted`. An application that needs a verified address requires the first setting, and says so in its guide.
 
-**The access token does not carry `email_verified` today.** Its claims are, among them, `sub`, `tid`, `roles` and `email`. The `email_verified` claim arrives with a later protocol version; until then an application reads it from the session or from `userinfo`, never from the token.
+**The access token carries `email_verified`, as it was when the token was issued.** Its claims are, among them, `sub`, `tid`, `roles`, `email` and `email_verified`. A token lives at most 15 minutes, so the claim can be that old; an application that must act on the address at once reads the session or `userinfo` instead. A token issued before Cauthy wrote the claim lacks it: read it as `false`.
 
 ## What a client never receives
 
