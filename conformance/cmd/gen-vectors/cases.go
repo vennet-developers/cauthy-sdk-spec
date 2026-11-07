@@ -62,6 +62,12 @@ type null struct{}
 
 func (null) MarshalJSON() ([]byte, error) { return []byte("null"), nil }
 
+// number is a claim written exactly as given: a JSON number in a syntax
+// json.Marshal would not choose, such as 1.8e9 or 1800000000.0.
+type number string
+
+func (n number) MarshalJSON() ([]byte, error) { return []byte(n), nil }
+
 // Cases answers every case, in the order of the rules.
 func Cases(k Keys) []vectors.Case {
 	a := k[KidA]
@@ -191,6 +197,14 @@ func Cases(k Keys) []vectors.Case {
 		invalid("claims/nbf-string", "R8", "nbf is a string", signed(with(person(), "nbf", "1767225540")), verify.InvalidClaim),
 		invalid("claims/exp-fractional", "R8", "exp is not an integer", signed(with(person(), "exp", float64(Now+840)+0.5)), verify.InvalidClaim),
 		invalid("claims/exp-too-large", "R8", "exp beyond 2^53", signed(with(person(), "exp", int64(1)<<53+1)), verify.InvalidClaim),
+		// A NumericDate is a JSON integer: a whole value written with an
+		// exponent or a decimal point is not one, though it parses as a number.
+		invalid("claims/exp-exponent", "R8", "exp written with an exponent (1.8e9)", signed(with(person(), "exp", number("1.8e9"))), verify.InvalidClaim),
+		invalid("claims/exp-decimal-point", "R8", "exp written with a decimal point (1800000000.0)", signed(with(person(), "exp", number("1800000000.0"))), verify.InvalidClaim),
+		invalid("claims/iat-exponent", "R8", "iat written with an exponent (1.76722554e9)", signed(with(person(), "iat", number("1.76722554e9"))), verify.InvalidClaim),
+		invalid("claims/iat-decimal-point", "R8", "iat written with a decimal point (1767225540.0)", signed(with(person(), "iat", number("1767225540.0"))), verify.InvalidClaim),
+		invalid("claims/nbf-exponent", "R8", "nbf written with an exponent (1.76722554e9)", signed(with(person(), "nbf", number("1.76722554e9"))), verify.InvalidClaim),
+		invalid("claims/nbf-decimal-point", "R8", "nbf written with a decimal point (1767225540.0)", signed(with(person(), "nbf", number("1767225540.0"))), verify.InvalidClaim),
 		invalid("claims/email-verified-string", "R8", "email_verified is the string \"true\"", signed(with(person(), "email_verified", "true")), verify.InvalidClaim),
 
 		invalid("iss/other", "R9", "Another issuer", signed(with(person(), "iss", "https://attacker.example.com")), verify.WrongIssuer),

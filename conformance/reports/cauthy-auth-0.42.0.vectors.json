@@ -1,7 +1,7 @@
 {
   "sdk": "cauthy-auth",
   "version": "0.42.0",
-  "vectors": 90,
+  "vectors": 96,
   "findings": [
     {
       "name": "valid/exp-inside-leeway",
@@ -170,6 +170,54 @@
       "reason": "invalid_claim",
       "got": "error",
       "detail": "Invalid time value"
+    },
+    {
+      "name": "claims/exp-exponent",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/exp-decimal-point",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/iat-exponent",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/iat-decimal-point",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/nbf-exponent",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/nbf-decimal-point",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
     },
     {
       "name": "claims/email-verified-string",
