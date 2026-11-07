@@ -56,3 +56,7 @@ After changing a case or a rule, regenerate the vectors (the keys stay):
     cd conformance && go run ./cmd/gen-vectors ../vectors/keys ../vectors
 
 The keys in `vectors/keys` are test-only and public on purpose; see `vectors/keys/README.md`.
+
+## License
+
+Apache License 2.0: see [LICENSE](LICENSE) and [NOTICE](NOTICE).

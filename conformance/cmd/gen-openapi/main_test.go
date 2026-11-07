@@ -51,7 +51,7 @@ routes:
 		"        '404':\n          description: Unknown provider",
 		"        - {name: provider, in: path, required: true, schema: {type: string}}",
 		"servers:\n  - url: /api/auth",
-		"  license: {name: MIT, identifier: MIT}",
+		"  license: {name: Apache-2.0, identifier: Apache-2.0}",
 		"          headers: {Location: {schema: {type: string}}}",
 		"errors are delivered by redirect with ?auth_error=<code>",
 	} {
