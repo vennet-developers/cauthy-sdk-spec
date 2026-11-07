@@ -110,7 +110,7 @@ func (v *Verifier) Verify(ctx context.Context, token string, now time.Time) (*Id
 
 	// R11 — time, with the leeway.
 	t := float64(now.UnixNano()) / 1e9
-	l := v.cfg.Leeway.Seconds()
+	l := v.leeway.Seconds()
 	if t >= c.exp+l {
 		return nil, refuse(Expired, "exp %v is past", c.exp)
 	}

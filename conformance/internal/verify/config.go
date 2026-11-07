@@ -25,15 +25,20 @@ type Config struct {
 	Tenant string
 	// AllowAnonymous lets a guest's token through. Off by default.
 	AllowAnonymous bool
-	// Leeway is the clock tolerance: zero means DefaultLeeway; at most MaxLeeway.
-	Leeway time.Duration
+	// Leeway is the clock tolerance: nil means DefaultLeeway, a pointer to
+	// zero means none; at most MaxLeeway. LeewayOf makes the pointer.
+	Leeway *time.Duration
 }
 
 // Verifier checks tokens against one configuration and one key set.
 type Verifier struct {
-	cfg  Config
-	keys Keys
+	cfg    Config
+	leeway time.Duration
+	keys   Keys
 }
+
+// LeewayOf is a Config.Leeway of d.
+func LeewayOf(d time.Duration) *time.Duration { return &d }
 
 var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
@@ -46,9 +51,10 @@ func checkIssuer(name, iss string) error {
 	if err != nil || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
 		return fmt.Errorf("verify: %s %q is not an absolute URL", name, iss)
 	}
-	local := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"
+	host := u.Hostname()
+	local := host == "localhost" || host == "127.0.0.1" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".test")
 	if u.Scheme != "https" && !(u.Scheme == "http" && local) {
-		return fmt.Errorf("verify: %s %q must be https (http only for localhost)", name, iss)
+		return fmt.Errorf("verify: %s %q must be https (http only for localhost, *.localhost and *.test)", name, iss)
 	}
 	if strings.HasSuffix(iss, "/") {
 		return fmt.Errorf("verify: %s %q must not end in /", name, iss)
@@ -73,14 +79,35 @@ func New(cfg Config, keys Keys) (*Verifier, error) {
 	if !uuidRE.MatchString(cfg.Tenant) || cfg.Tenant == nilUUID {
 		return nil, fmt.Errorf("verify: tenant %q is not a lowercase UUID", cfg.Tenant)
 	}
-	if cfg.Leeway == 0 {
-		cfg.Leeway = DefaultLeeway
+	leeway := DefaultLeeway
+	if cfg.Leeway != nil {
+		leeway = *cfg.Leeway
 	}
-	if cfg.Leeway < 0 || cfg.Leeway > MaxLeeway {
-		return nil, fmt.Errorf("verify: leeway %s is outside 0..%s", cfg.Leeway, MaxLeeway)
+	if leeway < 0 || leeway > MaxLeeway {
+		return nil, fmt.Errorf("verify: leeway %s is outside 0..%s", leeway, MaxLeeway)
 	}
 	if keys == nil {
 		return nil, errors.New("verify: keys are required")
 	}
-	return &Verifier{cfg: cfg, keys: keys}, nil
+	return &Verifier{cfg: cfg, leeway: leeway, keys: keys}, nil
+}
+
+// JWKSURL is where the issuer publishes its keys: <issuer>/.well-known/jwks.json.
+// It is derived from the configured issuer, never read from a token, and the
+// issuer must pass the same checks as in New (https, http only for local hosts).
+func JWKSURL(cfg Config) (string, error) {
+	if err := checkIssuer("issuer", cfg.Issuer); err != nil {
+		return "", err
+	}
+	return cfg.Issuer + "/.well-known/jwks.json", nil
+}
+
+// NewRemote answers the key set of cfg's issuer, fetched over HTTP under the
+// rules K1–K6.
+func NewRemote(cfg Config) (*RemoteKeys, error) {
+	url, err := JWKSURL(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return NewRemoteKeys(HTTPFetcher(url), DefaultCooldown, nil), nil
 }

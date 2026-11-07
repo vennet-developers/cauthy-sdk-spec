@@ -70,7 +70,7 @@ func TestVerifyUsesTheConfiguredLeeway(t *testing.T) {
 	if _, err := verifier(t, nil).Verify(context.Background(), tok, now); err != nil {
 		t.Fatalf("default leeway: %v", err)
 	}
-	strict := verifier(t, func(c *Config) { c.Leeway = 5 * time.Second })
+	strict := verifier(t, func(c *Config) { c.Leeway = LeewayOf(5 * time.Second) })
 	if _, err := strict.Verify(context.Background(), tok, now); reasonOf(err) != Expired {
 		t.Fatalf("5s leeway: want expired, got %v", err)
 	}
@@ -113,5 +113,15 @@ func TestRefusalNeverQuotesTheToken(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), strings.Split(tok, ".")[2]) {
 		t.Fatal("the error quotes the token")
+	}
+}
+
+func TestVerifyWithNoLeewayAtAll(t *testing.T) {
+	none := verifier(t, func(c *Config) { c.Leeway = LeewayOf(0) })
+	if _, err := none.Verify(context.Background(), token(t, map[string]any{"exp": now.Unix() + 1}), now); err != nil {
+		t.Fatalf("one second left: %v", err)
+	}
+	if _, err := none.Verify(context.Background(), token(t, map[string]any{"exp": now.Unix()}), now); reasonOf(err) != Expired {
+		t.Fatalf("exp is now: want expired, got %v", err)
 	}
 }
