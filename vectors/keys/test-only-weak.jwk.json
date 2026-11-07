@@ -1,0 +1,10 @@
+{
+  "comment": "TEST ONLY. A key for the cauthy-sdk-spec vectors, published on purpose. Never use it to sign anything real.",
+  "kty": "RSA",
+  "kid": "test-only-weak",
+  "n": "wt_PG5s6UsBzXLSUOI-E3jxO0cF1uD2IIdPcwFAmQ1tXUKIoB2QulJIyYosPn1uArkUkDX53iGzcmVU573N82LeFHQRYUc-mOmIv6_KnDWQIakscP4RSzg7yaoNHfWxUmz56ue8qXO7F0zu2SKydw2VO1uJqa9F3TAPY0Kh7e9k",
+  "e": "AQAB",
+  "d": "TAbE5iBJQL-UQjaxHN_hFlKw7WRsaNSYp5ngJacfRmf8SJj6xOdwxMXEom1eSu2H5nVS-3C7cZ4G8kstrx1_Nt8Y00flguCJ_OD0w59PkkTMFzpoyelMceyWrmMXMaNs0-0XhT2av0biOgCUmtKVpjMadd-5nYuxycaoZigB6YE",
+  "p": "3TqxOutYc5bzk-Ikd63xyz0PnY8wC3MelNeIEhUPXr0xty_5R-WwHIMNOd7iGkg-K8Kv2TVPX56TIeeZpTtVtw",
+  "q": "4YC0grB4f37NQ7bTIlmxVyDw4XSqr3A74dQgV4JSjXJVFW9qQQ-FE0l-NZmcAasjvEOm7xmVgMB6KOOhOK067w"
+}

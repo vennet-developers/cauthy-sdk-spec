@@ -1,0 +1,10 @@
+{
+  "comment": "TEST ONLY. A key for the cauthy-sdk-spec vectors, published on purpose. Never use it to sign anything real.",
+  "kty": "RSA",
+  "kid": "test-only-attacker",
+  "n": "x3fVfpt-rmb5ZxfFuAMRZILcj8LEvYyRyjzPFJbVGCgaLWvrkqZM8fiH9b71Ggn0scCT_JarMy8bEh9v16SKGOQ79zphFYm1hsYMr0zcsG4s_w_ykLUteInZPPhB1c_mnukLPRaFs_KOwL_Zb67IGTxkKiposSVyEtPd0gPmGfcUzGvaxPpkHCvTp5upzHtB7loa9_DNvvhVK9qsa50vB0n6sEVQts3qDUrWdGhTXBTUKeQuIAoa5Nip72gBSmh7jh2DqU7dcJERi8SomQBNhwgvjN-nSL2LGrwRIXK-hQ4_DzIbwFp8KGX4KAYc_-L_C4SwJBEW4_ajFtwj2MHESQ",
+  "e": "AQAB",
+  "d": "DXm7iyOfIdIkHEJfYaiXZrZuhynN185k1QhZpxbvi4O-DP6C-jPQ8_Hp4YDGlz0_8jhD5ycYpssSZZ2JFUTw7XCR2ohvoaBdip7boYYsTKEM2ihuJzeOPFv3uKY-8F5swqSU1UotuzPyT_RGEMT6kLXjQHQAAaO5eqski7kmtO89RY49Yx-65QHuGXoJZG9qXNjrh4I-Jg-Znn_9Bqi5DU4NTopFxrNn5h42I6RpLULAfi-RHUdqODzBagyqvrkxsb_TklECyXVJNponwny-3hjd9-st0UMch7c2_eGmLbSmJJwiXmt1fW_3L0-IHKaB1uuZevxmTsYCt6Aj_Z1x5w",
+  "p": "28H7f4wMbe09kyGXhN4w6der2C0JGNlaae8TIQnvBgsmu6iv_p_KC_s5rImIP6YMpMXrrL4LzB3YeWBv063SUUYjIbBurV9qNpd9GZilrgY0678-QrGqzwFH6ZsKhlQ5bckxa5qjdtwy9fQCHbtZRiN7A59jQ2WGWoVJtPGPM-c",
+  "q": "6F08snPQGKjTiGZSnTpV3K9Ao_bGa_8ovEClsGgzGyKj3H-OXSn_pAvftl8tn-pr4b3DLXcgBGHumn8uBViX4Cib-Od3jkIfGPG20CgiV99vUYTiQPnkdiWNjfLIi31PDwK90elNch8o4gn_HaRPhs8mTP50rr0vLZ3PKrfRQE8"
+}
