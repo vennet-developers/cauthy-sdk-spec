@@ -22,6 +22,10 @@ func TestErrorAndCSRFChecks(t *testing.T) {
 	expect(t, reg, "errors.auth_route_401", fake.Knobs{NoAuth401: true}, "fail")
 	expect(t, reg, "csrf.foreign_origin_403", fake.Knobs{}, "pass")
 	expect(t, reg, "csrf.foreign_origin_403", fake.Knobs{AcceptCrossSite: true}, "fail")
+	expect(t, reg, "csrf.sign_out_foreign_origin_403", fake.Knobs{}, "pass")
+	expect(t, reg, "csrf.sign_out_foreign_origin_403", fake.Knobs{AcceptCrossSite: true}, "fail")
+	expect(t, reg, "csrf.fetch_site_same_site_403", fake.Knobs{}, "pass")
+	expect(t, reg, "csrf.fetch_site_same_site_403", fake.Knobs{AcceptCrossSite: true}, "fail")
 	expect(t, reg, "csrf.fetch_site_cross_403", fake.Knobs{}, "pass")
 	expect(t, reg, "csrf.fetch_site_cross_403", fake.Knobs{AcceptCrossSite: true}, "fail")
 }

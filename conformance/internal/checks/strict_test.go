@@ -15,6 +15,8 @@ func TestStrictChecks(t *testing.T) {
 	expect(t, reg, "strict.protocol_header", fake.Knobs{}, "fail")
 	expect(t, reg, "strict.request_header_required", fake.Knobs{Strict: true}, "pass")
 	expect(t, reg, "strict.request_header_required", fake.Knobs{}, "fail")
+	expect(t, reg, "strict.logout_exempt", fake.Knobs{Strict: true}, "pass")
+	expect(t, reg, "strict.logout_exempt", fake.Knobs{Strict: true, LogoutNotExempt: true}, "fail")
 	expect(t, reg, "strict.next_on_sign_in", fake.Knobs{Strict: true}, "pass")
 	expect(t, reg, "strict.next_on_sign_in", fake.Knobs{}, "fail")
 }
