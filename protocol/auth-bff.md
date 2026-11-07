@@ -12,7 +12,7 @@ A backend SDK serves these routes under one prefix (`/api/auth` by default). A c
 - A route whose `needs` has **`tenant`** is an own-screens route: it needs the backend to know its tenant. A backend without a tenant answers `500 not_configured`.
 - A route whose `needs` has **`step`** reads a short-lived step cookie set by an earlier route; without it, `400 step_expired`.
 - A route whose `needs` has **`crosssite`** runs the cross-site check; a route with **`json`** needs a JSON object body, else `400 bad_request`.
-- A route marked `failures: redirect` is a browser redirect. A failure sends the browser to its return path with `?auth_error=<code>` appended (`&` when the path already has a query). The return path is the `return_to` query parameter on a route that starts a flow and the step cookie's saved path on a callback; it must be a path on this site (it starts with `/`, not `//`), otherwise it is the backend's `afterSignIn` (default `/`). Two failures are not redirects: `500 not_configured` (JSON) on a backend without a tenant, and a plain-text `404` for an unknown provider.
+- A route marked `failures: redirect` is a browser redirect. A failure sends the browser to its return path with `?auth_error=<code>` appended (`&` when the path already has a query). The return path is the `return_to` query parameter on a route that starts a flow and the step cookie's saved path on a callback; it must be a path on this site (it starts with `/`, not `//`), otherwise it is the backend's configured after-sign-in path (default `/`). Two failures are not redirects: `500 not_configured` (JSON) on a backend without a tenant, and a plain-text `404` for an unknown provider.
 
 ## Levels
 
@@ -45,9 +45,9 @@ Every cookie: `Path=/; HttpOnly; SameSite=Lax`, and `Secure` when the applicatio
 | `step_up_required` | 401 | The route needs the current password (`field: password`); Cauthy's status passes through |
 | `invalid_credentials` | 401 | A wrong email or password |
 | `invalid_token` | 422 | A reset, verify, magic-link or invitation token Cauthy does not know |
-| `unauthenticated` | 401 | An **auth** route without a session |
+| `unauthenticated` | 401 | A route with `session` in `needs`, without a session |
 | `cross_site` | 403 | The cross-site check failed |
-| `not_configured` | 500 | An **own** route on a backend with no tenant |
+| `not_configured` | 500 | A route with `tenant` in `needs`, on a backend with no tenant |
 | `csrf_required` | 403 | At `strict`, a mutation without `X-Cauthy-Request: 1` |
 | `unavailable` | 503 | Cauthy did not answer |
 | `unavailable` | 502 | Cauthy answered with a token the backend cannot use |
@@ -94,7 +94,7 @@ Every other JSON answer carries `status` too. The values, by route:
 | `saved` | `POST /me` |
 | `changed` | `POST /me/password`, `POST /me/organizations/members/role`, `POST /reset-password` |
 | `signed_out` | `POST /sign-out`, `POST /me/sessions/end` |
-| `sent` | `POST /forgot-password`, `/sign-in/mfa/send`, `/sign-in/mfa/email`, `/sign-in/mfa/push` (with `number`), `/me/mfa/phone`, magic-link and email-code requests |
+| `sent` | `POST /forgot-password`, `/sign-in/mfa/send`, `/sign-in/mfa/email`, `/sign-in/mfa/push` (with `number`), `/me/mfa/phone`, `/me/email`, `/me/organizations/members/invite`, magic-link and email-code requests |
 | `verified` | `POST /verify-email` |
 | `accepted` | `POST /me/legal/accept` |
 | `started` | `POST /me/mfa/setup`, passkey `begin` routes, Google One Tap `begin` |
