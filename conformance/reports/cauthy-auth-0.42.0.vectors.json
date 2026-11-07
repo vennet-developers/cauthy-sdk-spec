@@ -1,7 +1,7 @@
 {
   "sdk": "cauthy-auth",
   "version": "0.42.0",
-  "vectors": 67,
+  "vectors": 90,
   "findings": [
     {
       "name": "valid/exp-inside-leeway",
@@ -24,8 +24,8 @@
       "rule": "R9",
       "expect": "valid",
       "reason": null,
-      "got": "invalid",
-      "detail": "s.charCodeAt is not a function"
+      "got": "error",
+      "detail": "SDK accepts no issuers list (s.charCodeAt is not a function)"
     },
     {
       "name": "size/too-large",
@@ -40,6 +40,54 @@
       "rule": "R2",
       "expect": "invalid",
       "reason": "malformed",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "shape/newline-in-signature",
+      "rule": "R2",
+      "expect": "invalid",
+      "reason": "malformed",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "shape/trailing-crlf",
+      "rule": "R2",
+      "expect": "invalid",
+      "reason": "malformed",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "shape/duplicate-header-key",
+      "rule": "R2",
+      "expect": "invalid",
+      "reason": "malformed",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "shape/duplicate-claim",
+      "rule": "R2",
+      "expect": "invalid",
+      "reason": "malformed",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "header/typ-webhook",
+      "rule": "R4",
+      "expect": "invalid",
+      "reason": "unsupported_header",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "header/typ-not-string",
+      "rule": "R4",
+      "expect": "invalid",
+      "reason": "unsupported_header",
       "got": "valid",
       "detail": ""
     },
@@ -76,6 +124,70 @@
       "detail": ""
     },
     {
+      "name": "claims/aud-null-element",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/aud-number-element",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/roles-null-element",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/roles-number-element",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/exp-fractional",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/exp-too-large",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "error",
+      "detail": "Invalid time value"
+    },
+    {
+      "name": "claims/email-verified-string",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "iss/not-in-list",
+      "rule": "R9",
+      "expect": "invalid",
+      "reason": "wrong_issuer",
+      "got": "error",
+      "detail": "SDK accepts no issuers list (s.charCodeAt is not a function)"
+    },
+    {
       "name": "time/iat-ahead",
       "rule": "R11",
       "expect": "invalid",
@@ -94,6 +206,24 @@
     },
     {
       "name": "system/sys-empty",
+      "rule": "R13",
+      "expect": "invalid",
+      "reason": "system_token",
+      "got": "valid",
+      "detail": "",
+      "resolution": "fixed in cauthy-auth 0.43 and in @cauthyhq/node 1.0"
+    },
+    {
+      "name": "system/sys-null",
+      "rule": "R13",
+      "expect": "invalid",
+      "reason": "system_token",
+      "got": "valid",
+      "detail": "",
+      "resolution": "fixed in cauthy-auth 0.43 and in @cauthyhq/node 1.0"
+    },
+    {
+      "name": "system/sys-false",
       "rule": "R13",
       "expect": "invalid",
       "reason": "system_token",

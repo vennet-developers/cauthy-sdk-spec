@@ -13,6 +13,14 @@
 // tokens.json. cauthy-auth 0.x carries no such code (its `reason` is jose's
 // text), so there the expected reason is shown beside its message.
 //
+// Only the SDK's own refusal counts as "invalid": an error whose name is
+// CauthyTokenError, or that carries a string `reason`. Any other error (a
+// TypeError from an option the SDK does not accept, say) is "error", which
+// is a finding of its own, never a pass.
+//
+// A case's allow_anonymous (and allow_system, if a case ever sets it) is passed
+// as allowAnonymous / allowSystem; an SDK that has no such option ignores them.
+//
 // A case with an `issuers` list is run with issuer: [issuer, ...issuers], the
 // form jose takes for several accepted issuers.
 
@@ -27,6 +35,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const vectors = JSON.parse(readFileSync(join(here, 'tokens.json'), 'utf8'))
 const jwks = JSON.parse(readFileSync(join(here, 'jwks.json'), 'utf8'))
 const dir = process.env.CAUTHY_AUTH_DIR
+const isRefusal = (err) => err?.name === 'CauthyTokenError' || typeof err?.reason === 'string'
 const codes = new Set(vectors.cases.map((c) => c.reason).filter(Boolean))
 
 // How the findings that let a system's or a guest's token pass as a person are
@@ -34,7 +43,7 @@ const codes = new Set(vectors.cases.map((c) => c.reason).filter(Boolean))
 // production run 0.42, and in @cauthyhq/node 1.0. Recorded in the report.
 const RESOLUTIONS = {
   'cauthy-auth': Object.fromEntries(
-    ['system/system-token', 'system/sys-empty', 'anonymous/guest'].map((name) => [name, 'fixed in cauthy-auth 0.43 and in @cauthyhq/node 1.0']),
+    ['system/system-token', 'system/sys-empty', 'system/sys-null', 'system/sys-false', 'anonymous/guest'].map((name) => [name, 'fixed in cauthy-auth 0.43 and in @cauthyhq/node 1.0']),
   ),
 }
 
@@ -57,15 +66,18 @@ test('vectors against cauthy-auth verifyToken', { skip: dir ? false : 'set CAUTH
     try {
       await verifyToken(c.token, {
         issuer: c.config.issuers?.length ? [c.config.issuer, ...c.config.issuers] : c.config.issuer,
+        allowAnonymous: c.config.allow_anonymous === true,
+        ...(c.config.allow_system === undefined ? {} : { allowSystem: c.config.allow_system === true }),
         audience: c.config.audience,
         tenantId: c.config.tenant,
         jwks: keys,
         now: new Date(c.now * 1000),
       })
     } catch (err) {
-      got = 'invalid'
+      got = isRefusal(err) ? 'invalid' : 'error'
       detail = err instanceof Error ? err.message : String(err)
-      gotReason = codes.has(err?.reason) ? err.reason : null
+      if (got === 'error' && c.config.issuers?.length) detail = `SDK accepts no issuers list (${detail})`
+      gotReason = got === 'invalid' && codes.has(err?.reason) ? err.reason : null
     }
     const reasonDiffers = got === 'invalid' && c.expect === 'invalid' && gotReason !== null && gotReason !== c.reason
     if (got !== c.expect || reasonDiffers) {
