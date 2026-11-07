@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,7 @@ routes:
       success: { status: 200, fields: { status: string, session: "object?" } }, errors: [invalid_email] }
   - { id: hosted.login, method: GET, path: /login, group: hosted, level: basic, needs: [], query: { return_to: {type: string} }, success: { redirect: true }, failures: redirect }
   - { id: other.events, method: GET, path: /events, group: other, level: basic, needs: [], success: { status: 200 }, stream: true }
-  - { id: other.text, method: GET, path: "/p/{provider}", group: other, level: basic, needs: [], query: { x: {type: string} }, success: { redirect: true }, text: true }
+  - { id: other.text, method: GET, path: "/p/{provider}", group: other, level: basic, needs: [tenant], query: { x: {type: string} }, success: { redirect: true }, failures: redirect }
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -46,6 +47,8 @@ routes:
 		"text/event-stream",
 		"'/p/{provider}':",
 		"text/plain",
+		"        '500':\n          description: not_configured",
+		"        '404':\n          description: Unknown provider",
 		"        - {name: provider, in: path, required: true, schema: {type: string}}",
 		"servers:\n  - url: /api/auth",
 		"  license: {name: MIT, identifier: MIT}",
@@ -120,14 +123,62 @@ func TestNullableTypes(t *testing.T) {
 	}
 }
 
-func TestRedirectFailuresHaveNoJSONError(t *testing.T) {
-	table, _ := routes.Parse([]byte(`version: 1
+func responsesOf(t *testing.T, src string) map[string]any {
+	t.Helper()
+	table, err := routes.Parse([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths map[string]map[string]struct {
+			Responses map[string]any `yaml:"responses"`
+		} `yaml:"paths"`
+	}
+	if err := yaml.Unmarshal(Generate(table), &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, methods := range doc.Paths {
+		for _, op := range methods {
+			return op.Responses
+		}
+	}
+	t.Fatal("no operation")
+	return nil
+}
+
+func TestRedirectFailuresHaveNoJSONDefault(t *testing.T) {
+	plain := responsesOf(t, `version: 1
 prefix: /api/auth
 routes:
   - { id: a.b, method: GET, path: /x, group: other, level: basic, success: { redirect: true }, failures: redirect }
-`))
-	out := string(Generate(table))
-	if strings.Contains(out, "Error'") && strings.Contains(out, "$ref: '#/components/schemas/Error'") {
-		t.Errorf("redirect-failure route must not reference the JSON Error:\n%s", out)
+`)
+	if _, ok := plain["500"]; ok {
+		t.Error("no tenant: no 500 response")
+	}
+	if _, ok := plain["404"]; ok {
+		t.Error("no path parameter: no 404 response")
+	}
+	if _, ok := plain["default"].(map[string]any)["content"]; ok {
+		t.Error("redirect failures: default has no content")
+	}
+
+	full := responsesOf(t, `version: 1
+prefix: /api/auth
+routes:
+  - { id: a.b, method: GET, path: "/p/{provider}", group: other, level: basic, needs: [tenant], success: { redirect: true }, failures: redirect }
+`)
+	if _, ok := full["default"].(map[string]any)["content"]; ok {
+		t.Error("redirect failures: default has no content")
+	}
+	e500, _ := full["500"].(map[string]any)
+	if e500 == nil || e500["description"] != "not_configured" {
+		t.Fatalf("500: %v", full["500"])
+	}
+	if !strings.Contains(fmt.Sprint(e500["content"]), "#/components/schemas/Error") {
+		t.Errorf("500 must reference the Error schema: %v", e500)
+	}
+	e404, _ := full["404"].(map[string]any)
+	if e404 == nil || e404["description"] != "Unknown provider" || !strings.Contains(fmt.Sprint(e404["content"]), "text/plain") {
+		t.Errorf("404: %v", full["404"])
 	}
 }

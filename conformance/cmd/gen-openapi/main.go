@@ -191,6 +191,21 @@ func Generate(t *routes.Table) []byte {
 			w("        default:")
 			if r.Failures == "redirect" {
 				w("          description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (%s)", strings.Join(append([]string{"bad_request"}, r.Errors...), ", "))
+				if r.Needs("tenant") {
+					w("        '500':")
+					w("          description: not_configured")
+					w("          content:")
+					w("            application/json:")
+					w("              schema:")
+					w("                $ref: '#/components/schemas/Error'")
+				}
+				if len(pathParams) > 0 {
+					w("        '404':")
+					w("          description: Unknown provider")
+					w("          content:")
+					w("            text/plain:")
+					w("              schema: {type: string}")
+				}
 				continue
 			}
 			w("          description: Error (%s)", strings.Join(append([]string{"bad_request"}, r.Errors...), ", "))

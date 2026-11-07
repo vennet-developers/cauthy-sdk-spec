@@ -989,6 +989,17 @@ paths:
           headers: {Location: {schema: {type: string}}}
         default:
           description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
+        '500':
+          description: not_configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown provider
+          content:
+            text/plain:
+              schema: {type: string}
   '/callback/{provider}':
     get:
       operationId: sign-in.social_callback
@@ -1009,6 +1020,17 @@ paths:
           headers: {Location: {schema: {type: string}}}
         default:
           description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
+        '500':
+          description: not_configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown provider
+          content:
+            text/plain:
+              schema: {type: string}
   /sign-in/sso:
     get:
       operationId: sign-in.sso
@@ -1028,6 +1050,12 @@ paths:
           headers: {Location: {schema: {type: string}}}
         default:
           description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
+        '500':
+          description: not_configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /sso/callback:
     get:
       operationId: sign-in.sso_callback
@@ -1046,6 +1074,12 @@ paths:
           headers: {Location: {schema: {type: string}}}
         default:
           description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
+        '500':
+          description: not_configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /sign-in/sso/discover:
     post:
       operationId: sign-in.sso_discover
@@ -1538,6 +1572,17 @@ paths:
           headers: {Location: {schema: {type: string}}}
         default:
           description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
+        '500':
+          description: not_configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown provider
+          content:
+            text/plain:
+              schema: {type: string}
   /me/identities/unlink:
     post:
       operationId: me.identities_unlink
@@ -1799,6 +1844,17 @@ paths:
           headers: {Location: {schema: {type: string}}}
         default:
           description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
+        '500':
+          description: not_configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown provider
+          content:
+            text/plain:
+              schema: {type: string}
   /me/organizations:
     get:
       operationId: organizations.list
