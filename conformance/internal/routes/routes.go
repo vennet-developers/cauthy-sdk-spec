@@ -74,6 +74,12 @@ func Parse(raw []byte) (*Table, error) {
 	if err := dec.Decode(&t); err != nil {
 		return nil, fmt.Errorf("routes.yaml: %w", err)
 	}
+	if t.Version != 1 {
+		return nil, fmt.Errorf("routes.yaml: version %d (only 1)", t.Version)
+	}
+	if !strings.HasPrefix(t.Prefix, "/") {
+		return nil, fmt.Errorf("routes.yaml: prefix %q must start with /", t.Prefix)
+	}
 	t.byID = map[string]*Route{}
 	for _, r := range t.Routes {
 		switch {
@@ -95,11 +101,28 @@ func Parse(raw []byte) (*Table, error) {
 }
 
 var (
-	validTypes = map[string]bool{"string": true, "email": true, "uuid": true, "number": true, "boolean": true, "object": true, "array": true}
-	validNeeds = map[string]bool{"tenant": true, "session": true, "step": true, "crosssite": true, "json": true}
+	validTypes   = map[string]bool{"string": true, "email": true, "uuid": true, "number": true, "boolean": true, "object": true, "array": true}
+	validGroups  = map[string]bool{"hosted": true, "session": true, "sign-in": true, "me": true, "organizations": true, "other": true}
+	validLevels  = map[string]bool{"basic": true, "strict": true}
+	validCookies = map[string]bool{"session": true, "flow": true, "again": true, "step": true}
+	validNeeds   = map[string]bool{"tenant": true, "session": true, "step": true, "crosssite": true, "json": true}
 )
 
 func validate(r *Route) error {
+	if !validGroups[r.Group] {
+		return fmt.Errorf("unknown group %q", r.Group)
+	}
+	if !validLevels[r.Level] {
+		return fmt.Errorf("unknown level %q", r.Level)
+	}
+	for _, c := range append(append([]string{}, r.Sets...), r.Clears...) {
+		if !validCookies[c] {
+			return fmt.Errorf("unknown cookie %q", c)
+		}
+	}
+	if r.Stream && r.Success.Redirect {
+		return fmt.Errorf("stream together with redirect")
+	}
 	if !strings.HasPrefix(r.Path, "/") {
 		return fmt.Errorf("path %q must start with /", r.Path)
 	}

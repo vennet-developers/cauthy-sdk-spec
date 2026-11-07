@@ -43,19 +43,24 @@ func TestRejectsInvalidRoutes(t *testing.T) {
 		return []byte("version: 1\nprefix: /api/auth\nroutes:\n  - " + route + "\n")
 	}
 	cases := map[string]string{
-		"unknown method":       `{id: a.b, method: PUT, path: /x, group: other, level: basic, success: {status: 200}}`,
-		"failures retry":       `{id: a.b, method: GET, path: /x, group: other, level: basic, success: {status: 200}, failures: retry}`,
-		"missing path":         `{id: a.b, method: GET, group: other, level: basic, success: {status: 200}}`,
-		"path without slash":   `{id: a.b, method: GET, path: x, group: other, level: basic, success: {status: 200}}`,
-		"typo key":             `{id: a.b, method: GET, path: /x, group: other, level: basic, need: [tenant], success: {status: 200}}`,
-		"unknown body type":    `{id: a.b, method: POST, path: /x, group: other, level: basic, needs: [json], body: {a: {type: text}}, success: {status: 200}}`,
-		"optional body type":   `{id: a.b, method: POST, path: /x, group: other, level: basic, needs: [json], body: {a: {type: "string?"}}, success: {status: 200}}`,
-		"unknown success type": `{id: a.b, method: GET, path: /x, group: other, level: basic, success: {status: 200, fields: {a: "str?"}}}`,
-		"unknown need":         `{id: a.b, method: GET, path: /x, group: other, level: basic, needs: [admin], success: {status: 200}}`,
-		"success is empty":     `{id: a.b, method: GET, path: /x, group: other, level: basic, success: {}}`,
-		"success is both":      `{id: a.b, method: GET, path: /x, group: other, level: basic, success: {status: 200, redirect: true}}`,
-		"body without json":    `{id: a.b, method: POST, path: /x, group: other, level: basic, body: {a: {type: string}}, success: {status: 200}}`,
-		"json on GET":          `{id: a.b, method: GET, path: /x, group: other, level: basic, needs: [json], success: {status: 200}}`,
+		"unknown method":         `{id: a.b, method: PUT, path: /x, group: other, level: basic, success: {status: 200}}`,
+		"failures retry":         `{id: a.b, method: GET, path: /x, group: other, level: basic, success: {status: 200}, failures: retry}`,
+		"missing path":           `{id: a.b, method: GET, group: other, level: basic, success: {status: 200}}`,
+		"path without slash":     `{id: a.b, method: GET, path: x, group: other, level: basic, success: {status: 200}}`,
+		"typo key":               `{id: a.b, method: GET, path: /x, group: other, level: basic, need: [tenant], success: {status: 200}}`,
+		"unknown body type":      `{id: a.b, method: POST, path: /x, group: other, level: basic, needs: [json], body: {a: {type: text}}, success: {status: 200}}`,
+		"optional body type":     `{id: a.b, method: POST, path: /x, group: other, level: basic, needs: [json], body: {a: {type: "string?"}}, success: {status: 200}}`,
+		"unknown success type":   `{id: a.b, method: GET, path: /x, group: other, level: basic, success: {status: 200, fields: {a: "str?"}}}`,
+		"unknown need":           `{id: a.b, method: GET, path: /x, group: other, level: basic, needs: [admin], success: {status: 200}}`,
+		"success is empty":       `{id: a.b, method: GET, path: /x, group: other, level: basic, success: {}}`,
+		"success is both":        `{id: a.b, method: GET, path: /x, group: other, level: basic, success: {status: 200, redirect: true}}`,
+		"body without json":      `{id: a.b, method: POST, path: /x, group: other, level: basic, body: {a: {type: string}}, success: {status: 200}}`,
+		"unknown group":          `{id: a.b, method: GET, path: /x, group: misc, level: basic, success: {status: 200}}`,
+		"unknown level":          `{id: a.b, method: GET, path: /x, group: other, level: pro, success: {status: 200}}`,
+		"unknown cookie in sets": `{id: a.b, method: GET, path: /x, group: other, level: basic, sets: [jar], success: {status: 200}}`,
+		"unknown cookie cleared": `{id: a.b, method: GET, path: /x, group: other, level: basic, clears: [jar], success: {status: 200}}`,
+		"stream and redirect":    `{id: a.b, method: GET, path: /x, group: other, level: basic, stream: true, success: {redirect: true}}`,
+		"json on GET":            `{id: a.b, method: GET, path: /x, group: other, level: basic, needs: [json], success: {status: 200}}`,
 	}
 	for name, route := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -67,5 +72,20 @@ func TestRejectsInvalidRoutes(t *testing.T) {
 	}
 	if _, err := Parse(base(`{id: a.b, method: GET, path: /x, group: other, level: basic, success: {status: 200, fields: {a: "string?"}}}`)); err != nil {
 		t.Fatalf("a valid route was rejected: %v", err)
+	}
+}
+
+func TestRejectsInvalidHeader(t *testing.T) {
+	route := "routes:\n  - {id: a.b, method: GET, path: /x, group: other, level: basic, success: {status: 200}}\n"
+	for name, head := range map[string]string{
+		"version 2":       "version: 2\nprefix: /api/auth\n",
+		"prefix no slash": "version: 1\nprefix: api/auth\n",
+		"prefix missing":  "version: 1\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Parse([]byte(head + route)); err == nil {
+				t.Fatal("want an error")
+			}
+		})
 	}
 }
