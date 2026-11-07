@@ -39,6 +39,9 @@ func RegisterStrict(reg *check.Registry) {
 		if err != nil {
 			return check.Fail(err.Error())
 		}
+		if res.Status == 404 {
+			return check.Fail("POST /logout answered 404; the route must exist")
+		}
 		if e, why := errorOf(res); why == "" && res.Status == 403 && e["code"] == "csrf_required" {
 			return check.Fail("POST /logout without X-Cauthy-Request answered 403 csrf_required; the route is exempt")
 		}

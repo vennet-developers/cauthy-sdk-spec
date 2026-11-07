@@ -33,8 +33,11 @@ func RegisterCSRF(reg *check.Registry) {
 	}})
 	crossSite403 := func(id, path, what string, headers map[string]string) check.Check {
 		return check.Check{ID: id, Group: "csrf", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
-			headers["X-Cauthy-Request"] = "1"
-			res, err := c.Client.Fresh().PostJSON(path, map[string]any{}, headers)
+			h := map[string]string{"X-Cauthy-Request": "1"}
+			for k, v := range headers {
+				h[k] = v
+			}
+			res, err := c.Client.Fresh().PostJSON(path, map[string]any{}, h)
 			if err != nil {
 				return check.Fail(err.Error())
 			}

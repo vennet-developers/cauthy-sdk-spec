@@ -114,6 +114,9 @@ func RegisterSession(reg *check.Registry) {
 		}
 		return check.Pass("HttpOnly; SameSite=Lax; Path=/; Secure when https")
 	}})
+	// session.authenticated_shape and session.sign_out share one sign-in (slotShape):
+	// authenticated_shape reads it and sign_out ends it, so they must run in this
+	// registration order.
 	reg.Add(check.Check{ID: "session.authenticated_shape", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
 		b, _, stop := signedIn(c, slotShape, false)
 		if stop != nil {

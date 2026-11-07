@@ -48,6 +48,7 @@ type Knobs struct {
 	NoErrorField          bool // errors never carry "field"
 	NoProtocolOn404       bool // the plain-text 404 lacks Cauthy-Protocol
 	LogoutNotExempt       bool // POST /logout needs X-Cauthy-Request at strict
+	LogoutMissing         bool // /logout is not served: 404
 }
 
 type Server struct {
@@ -287,6 +288,9 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		method = http.MethodGet
 	}
 	methods := s.methodsFor(path)
+	if s.Knobs.LogoutMissing && path == "/logout" {
+		methods = nil
+	}
 	if methods == nil {
 		if s.Knobs.UnknownNot404 {
 			s.write(w, 200, map[string]any{"status": "ok"})
