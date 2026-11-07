@@ -3,5 +3,4 @@ package checks
 
 import "github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
 
-func RegisterTable(*check.Registry)  {}
 func RegisterStrict(*check.Registry) {}
