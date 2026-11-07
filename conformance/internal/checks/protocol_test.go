@@ -59,3 +59,9 @@ func TestNoStoreAtBasicLeavesPlainTextAnswersToStrict(t *testing.T) {
 	expect(t, reg, "protocol.no_store", fake.Knobs{PlainTextCacheable: true}, "pass")
 	expect(t, reg, "protocol.no_store", fake.Knobs{PlainTextCacheable: true, NoCacheControl: true}, "fail")
 }
+
+// A 404 is not plain text by itself: only the probes marked as plain-text are
+// exempt at basic. A GET /session that answers 404 without no-store fails.
+func TestNoStoreDoesNotExemptAJSONRouteAnswering404(t *testing.T) {
+	expect(t, protocolRegistry(), "protocol.no_store", fake.Knobs{SessionUncacheable404: true}, "fail")
+}

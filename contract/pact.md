@@ -14,7 +14,7 @@ Pact is Vennet's contract network; `core-contracts` holds the manifests and link
 
 The tenant is the link's `identity.tenant` (an id), turned into a slug through the provider's `tenants` list.
 
-### Link fields accepted for core-contracts (not yet on its main; Cauthy and SDKs read them in a later version)
+### Link fields accepted for core-contracts (read by SDKs from protocol version 2)
 
 | Field | Meaning |
 | --- | --- |

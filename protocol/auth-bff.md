@@ -6,7 +6,7 @@ A backend SDK serves these routes under one prefix (`/api/auth` by default). A c
 
 - Paths are relative to the prefix. The backend strips trailing slashes: `/session/` is `/session`. The bare prefix answers 404.
 - `HEAD` behaves as `GET`. Any method other than `POST` on a route that only takes `POST` answers `405` with `Allow: POST`. Other mismatched methods are unspecified at `basic`; the runner only checks the first rule. There is no CORS: a client is same-origin.
-- `cache-control: no-store` on every JSON answer and redirect, and at `strict` on every answer, the plain-text `404` and `405` included (at `basic` they may be cacheable: they carry nothing of the person); JSON answers carry `content-type: application/json; charset=utf-8`, except `GET /sign-in/mfa/push/events`, which streams `text/event-stream` (marked `stream: true` in the table). A redirect answers `302` with `Location`.
+- `cache-control: no-store` on every JSON answer and redirect, and at `strict` on every answer, the plain-text ones included: `404`, `405`, and the hosted `/callback` `400` and `/refresh` `503` (at `basic` the plain-text answers may be cacheable: they carry nothing of the person); JSON answers carry `content-type: application/json; charset=utf-8`, except `GET /sign-in/mfa/push/events`, which streams `text/event-stream` (marked `stream: true` in the table). A redirect answers `302` with `Location`.
 - Query parameters are `snake_case` (`return_to`); JSON bodies and answers are `camelCase` (`newPassword`). The reads `GET /me/organizations/members` and `/roles` take the organization as the query parameter `id`; every mutation takes `organizationId` in the body.
 - A route whose `needs` has **`session`** needs a signed-in session; without one it answers `401 unauthenticated`. It may set a renewed session cookie on the way out.
 - A route whose `needs` has **`tenant`** is an own-screens route: it needs the backend to know its tenant. A backend without a tenant answers `500 not_configured`.
@@ -16,7 +16,7 @@ A backend SDK serves these routes under one prefix (`/api/auth` by default). A c
 
 ## Levels
 
-`basic` is the protocol as served today; `strict` adds four requirements: `Cauthy-Protocol: 1`, `X-Cauthy-Request` on mutations, `next` on sign-in answers, and `no-store` on the plain-text answers too. A backend declares which it meets. See the table at the end.
+`basic` is the protocol as served today; `strict` adds four requirements: `Cauthy-Protocol: 1`, `X-Cauthy-Request` on mutations, `next` on sign-in answers, and `no-store` on every answer, the plain-text ones included. A backend declares which it meets. See the table at the end.
 
 ## Cookies
 
@@ -163,4 +163,4 @@ The table is `routes.yaml`; `openapi/auth-bff.yaml` is generated from it. Groups
 | errors | basic | Error shape; validation with `field`; 401 on auth routes |
 | csrf | basic | `403 cross_site` on a foreign Origin and on `Sec-Fetch-Site: cross-site` |
 | table | basic | Every route in the table answers its method with something other than 404 or 405; `/methods` and `/session` carry their fields |
-| strict | strict | `Cauthy-Protocol: 1`; `X-Cauthy-Request` required; `next` on sign-in answers; no-store on the plain-text 404 and 405 |
+| strict | strict | `Cauthy-Protocol: 1`; `X-Cauthy-Request` required; `next` on sign-in answers; no-store on every answer, plain-text ones included; the check samples the plain-text 404 and 405 (the hosted `/callback` 400 and `/refresh` 503 need a hosted deployment and are not sampled) |

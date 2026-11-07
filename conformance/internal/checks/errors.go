@@ -63,7 +63,7 @@ func RegisterErrors(reg *check.Registry) {
 		if c.Email == "" {
 			return check.Skip("no credentials")
 		}
-		res, err := c.Client.Fresh().PostJSON("/sign-in/email", map[string]any{"email": c.Email, "password": "definitely-wrong-" + c.Password}, hdr)
+		res, err := c.Client.Fresh().PostJSON("/sign-in/email", map[string]any{"email": c.Email, "password": "definitely-wrong-password-0"}, hdr)
 		if err != nil {
 			return check.Fail(err.Error())
 		}

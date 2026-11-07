@@ -88,7 +88,7 @@ func RegisterProtocol(reg *check.Registry) {
 type answer struct {
 	label string
 	res   *client.Response
-	text  bool // the plain-text 404 or 405
+	text  bool // a probe that expects the plain-text 404 or 405 (marked where it is sampled)
 }
 
 // sampleAnswers gets one answer of each kind a backend gives: a JSON read, the
@@ -97,36 +97,36 @@ type answer struct {
 func sampleAnswers(c *check.Ctx) ([]answer, error) {
 	hdr := map[string]string{"X-Cauthy-Request": "1"}
 	var out []answer
-	add := func(label string, res *client.Response, err error) error {
+	add := func(label string, res *client.Response, err error, text bool) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", label, err)
 		}
-		out = append(out, answer{label: label, res: res, text: res.Status == 404 || res.Status == 405})
+		out = append(out, answer{label: label, res: res, text: text})
 		return nil
 	}
 	b := c.Client.Fresh()
 	res, err := b.Get("/session", nil)
-	if err := add("GET /session", res, err); err != nil {
+	if err := add("GET /session", res, err, false); err != nil {
 		return nil, err
 	}
 	res, err = b.Get("/methods", nil)
-	if err := add("GET /methods", res, err); err != nil {
+	if err := add("GET /methods", res, err, false); err != nil {
 		return nil, err
 	}
 	res, err = b.PostJSON("/sign-in/email", map[string]any{}, hdr)
-	if err := add("POST /sign-in/email with an invalid body", res, err); err != nil {
+	if err := add("POST /sign-in/email with an invalid body", res, err, false); err != nil {
 		return nil, err
 	}
 	res, err = b.Get("/nope-does-not-exist", nil)
-	if err := add("GET /nope-does-not-exist (404)", res, err); err != nil {
+	if err := add("GET /nope-does-not-exist (404)", res, err, true); err != nil {
 		return nil, err
 	}
 	res, err = b.Get("/sign-in/email", nil)
-	if err := add("GET /sign-in/email (405)", res, err); err != nil {
+	if err := add("GET /sign-in/email (405)", res, err, true); err != nil {
 		return nil, err
 	}
 	res, err = b.Get("/login", nil)
-	if err := add("GET /login (redirect)", res, err); err != nil {
+	if err := add("GET /login (redirect)", res, err, false); err != nil {
 		return nil, err
 	}
 	return out, nil

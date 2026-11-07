@@ -50,6 +50,7 @@ type Knobs struct {
 	PlainTextCacheable    bool // the plain-text 404 and 405 carry no Cache-Control, as cauthy-auth 0.42 answers them
 	LogoutNotExempt       bool // POST /logout needs X-Cauthy-Request at strict
 	LogoutMissing         bool // /logout is not served: 404
+	SessionUncacheable404 bool // GET /session answers 404 without Cache-Control
 }
 
 type Server struct {
@@ -290,6 +291,12 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	if method == http.MethodHead {
 		method = http.MethodGet
+	}
+	if s.Knobs.SessionUncacheable404 && path == "/session" && method == http.MethodGet {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(404)
+		w.Write([]byte("Not found"))
+		return
 	}
 	methods := s.methodsFor(path)
 	if s.Knobs.LogoutMissing && path == "/logout" {
