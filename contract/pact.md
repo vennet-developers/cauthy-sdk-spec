@@ -20,9 +20,9 @@ The tenant is the link's `identity.tenant` (an id), turned into a slug through t
 | --- | --- |
 | `identity.tenant` by slug | The link names the tenant by its slug. `identity.tenant` still accepts a UUID besides a slug. The graph adds `tenant_id` when the slug is listed, or `create_tenant: true` when it is new and the provider is Cauthy. The nil UUID is refused |
 | `sign_in.require_verified_email` | Always present in the graph; the application asks for verified emails |
-| `sign_in.system_proof: off \| auto \| required` | Added beside the boolean, which stays. Under `auto` Cauthy turns the requirement on by itself after the first sign-in through this client that carried the proof, and records when; until then, and for readers that know only the boolean, `require_system_proof` stays `false` |
+| `sign_in.require_system_proof: auto` (the graph adds `system_proof: off \| auto \| required`) | Added beside the boolean, which stays. Under `auto` Cauthy turns the requirement on by itself after the first sign-in through this client that carried the proof, and records when; until then, and for readers that know only the boolean, `require_system_proof` stays `false` |
 
-Until then an SDK needs the link to name its tenant by UUID; a slug-named link is refused at start (the SDK looks the id up in the provider's `tenants` list).
+Until SDKs read these fields, an SDK needs the link to name its tenant by UUID; a slug-named link is refused at start (the SDK looks the id up in the provider's `tenants` list).
 
 ## When it refuses to start
 
