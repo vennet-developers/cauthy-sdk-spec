@@ -1,0 +1,2165 @@
+# GENERATED from protocol/routes.yaml by conformance/cmd/gen-openapi. Do not edit.
+openapi: 3.1.0
+info:
+  title: Cauthy auth-bff protocol
+  version: '1'
+  description: The /api/auth/* routes a backend SDK serves and a client SDK consumes. Relative to the prefix /api/auth.
+paths:
+  /login:
+    get:
+      operationId: hosted.login
+      tags: [hosted]
+      x-cauthy-level: basic
+      x-cauthy-needs: []
+      x-cauthy-sets-cookies: [flow]
+      parameters:
+        - {name: locale, in: query, schema: {type: string}}
+        - {name: method, in: query, schema: {type: string}}
+        - {name: prompt, in: query, schema: {type: string}}
+        - {name: return_to, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /callback:
+    get:
+      operationId: hosted.callback
+      tags: [hosted]
+      x-cauthy-level: basic
+      x-cauthy-needs: []
+      x-cauthy-sets-cookies: [session, again]
+      x-cauthy-clears-cookies: [flow, again]
+      parameters:
+        - {name: code, in: query, schema: {type: string}}
+        - {name: error, in: query, schema: {type: string}}
+        - {name: state, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            text/plain:
+              schema: {type: string}
+  /logout:
+    get:
+      operationId: hosted.logout
+      tags: [hosted]
+      x-cauthy-level: basic
+      x-cauthy-needs: []
+      x-cauthy-clears-cookies: [session]
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: hosted.logout_post
+      tags: [hosted]
+      x-cauthy-level: basic
+      x-cauthy-needs: []
+      x-cauthy-clears-cookies: [session]
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /refresh:
+    get:
+      operationId: hosted.refresh
+      tags: [hosted]
+      x-cauthy-level: basic
+      x-cauthy-needs: []
+      x-cauthy-sets-cookies: [session]
+      x-cauthy-clears-cookies: [session]
+      parameters:
+        - {name: return_to, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            text/plain:
+              schema: {type: string}
+  /account:
+    get:
+      operationId: hosted.account
+      tags: [hosted]
+      x-cauthy-level: basic
+      x-cauthy-needs: []
+      parameters:
+        - {name: locale, in: query, schema: {type: string}}
+        - {name: return_to, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /session:
+    get:
+      operationId: session.get
+      tags: [session]
+      x-cauthy-level: basic
+      x-cauthy-needs: []
+      x-cauthy-sets-cookies: [session]
+      x-cauthy-clears-cookies: [session]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-out:
+    post:
+      operationId: session.sign_out
+      tags: [session]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite]
+      x-cauthy-clears-cookies: [session]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/sessions:
+    get:
+      operationId: session.list
+      tags: [session]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions: {type: array}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/sessions/end:
+    post:
+      operationId: session.end_all
+      tags: [session]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      x-cauthy-clears-cookies: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /methods:
+    get:
+      operationId: other.methods
+      tags: [other]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [magicLink, passkey, passkeyHere, passkeyOnCauthy, passwordSignIn, providers, signUp, sso]
+                properties:
+                  captchaSiteKey: {type: string}
+                  legal: {type: object}
+                  magicLink: {type: boolean}
+                  organization: {type: object}
+                  passkey: {type: boolean}
+                  passkeyHere: {type: boolean}
+                  passkeyOnCauthy: {type: boolean}
+                  password: {type: object}
+                  passwordSignIn: {type: boolean}
+                  persistentSessions: {type: boolean}
+                  providers: {type: array}
+                  signUp: {type: boolean}
+                  sso: {type: boolean}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /look:
+    get:
+      operationId: other.look
+      tags: [other]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant]
+      responses:
+        '200':
+          description: Success
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/email:
+    post:
+      operationId: sign-in.email
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      x-cauthy-sets-cookies: [session, step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string}
+                remember: {type: boolean}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  method: {type: string}
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/mfa:
+    post:
+      operationId: sign-in.mfa
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      x-cauthy-clears-cookies: [step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, status]
+                properties:
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/mfa/methods:
+    post:
+      operationId: sign-in.mfa_methods
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, totp]
+                properties:
+                  email: {type: object}
+                  phone: {type: object}
+                  push: {type: object}
+                  status: {type: string}
+                  totp: {type: boolean}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/mfa/send:
+    post:
+      operationId: sign-in.mfa_send
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [channel, sentTo, status]
+                properties:
+                  channel: {type: string}
+                  sentTo: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/mfa/email:
+    post:
+      operationId: sign-in.mfa_email
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sentTo, status]
+                properties:
+                  sentTo: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/mfa/push:
+    post:
+      operationId: sign-in.mfa_push
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [number, status]
+                properties:
+                  number: {type: number}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/mfa/push/finish:
+    post:
+      operationId: sign-in.mfa_push_finish
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      x-cauthy-clears-cookies: [step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, status]
+                properties:
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/mfa/push/events:
+    get:
+      operationId: sign-in.mfa_push_events
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step]
+      responses:
+        '200':
+          description: Server-sent events
+          content:
+            text/event-stream:
+              schema: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-up/email:
+    post:
+      operationId: sign-in.sign_up
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                acceptLegal: {type: boolean}
+                consents: {type: object}
+                email: {type: string, format: email}
+                name: {type: string}
+                organization: {type: string}
+                password: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  email: {type: string}
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, weak_password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /forgot-password:
+    post:
+      operationId: sign-in.forgot_password
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, format: email}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /reset-password:
+    post:
+      operationId: sign-in.reset_password
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, token]
+              properties:
+                password: {type: string}
+                token: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_token, weak_password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /verify-email:
+    post:
+      operationId: sign-in.verify_email
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /invitation:
+    get:
+      operationId: sign-in.invitation
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant]
+      parameters:
+        - {name: token, in: query, schema: {type: string}, required: true}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitation, status]
+                properties:
+                  invitation: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /invitation/accept:
+    post:
+      operationId: sign-in.invitation_accept
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      x-cauthy-sets-cookies: [session, step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, token]
+              properties:
+                password: {type: string}
+                token: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  method: {type: string}
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_token, weak_password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/magic-link:
+    post:
+      operationId: sign-in.magic_link
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      x-cauthy-sets-cookies: [step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                create: {type: boolean}
+                email: {type: string, format: email}
+                remember: {type: boolean}
+                returnTo: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string}
+        default:
+          description: Error (bad_request, not_configured)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/email-code:
+    post:
+      operationId: sign-in.email_code
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      x-cauthy-clears-cookies: [step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [returnTo, session, status]
+                properties:
+                  returnTo: {type: string}
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/magic-link/verify:
+    post:
+      operationId: sign-in.magic_link_verify
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                remember: {type: boolean}
+                token: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, status]
+                properties:
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/passkey/begin:
+    post:
+      operationId: sign-in.passkey_begin
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      x-cauthy-sets-cookies: [step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: {type: string, format: email}
+                remember: {type: boolean}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [options, status]
+                properties:
+                  options: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/passkey/finish:
+    post:
+      operationId: sign-in.passkey_finish
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      x-cauthy-clears-cookies: [step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credential]
+              properties:
+                credential: {type: object}
+                remember: {type: boolean}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, status]
+                properties:
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, passkey_failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/google-one-tap/begin:
+    post:
+      operationId: sign-in.google_one_tap_begin
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clientId, nonce, status]
+                properties:
+                  clientId: {type: string}
+                  nonce: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/google-one-tap:
+    post:
+      operationId: sign-in.google_one_tap
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credential]
+              properties:
+                credential: {type: string}
+                remember: {type: boolean}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, status]
+                properties:
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/anonymous:
+    post:
+      operationId: sign-in.anonymous
+      tags: [sign-in]
+      deprecated: true
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, status]
+                properties:
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  '/sign-in/social/{provider}':
+    get:
+      operationId: sign-in.social
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant]
+      x-cauthy-failures: redirect
+      x-cauthy-sets-cookies: [step]
+      parameters:
+        - {name: remember, in: query, schema: {type: boolean}}
+        - {name: return_to, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  '/callback/{provider}':
+    get:
+      operationId: sign-in.social_callback
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step]
+      x-cauthy-failures: redirect
+      x-cauthy-sets-cookies: [session]
+      x-cauthy-clears-cookies: [step]
+      parameters:
+        - {name: code, in: query, schema: {type: string}}
+        - {name: error, in: query, schema: {type: string}}
+        - {name: state, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/sso:
+    get:
+      operationId: sign-in.sso
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant]
+      x-cauthy-failures: redirect
+      x-cauthy-sets-cookies: [step]
+      parameters:
+        - {name: connection, in: query, schema: {type: string}}
+        - {name: email, in: query, schema: {type: string}}
+        - {name: remember, in: query, schema: {type: boolean}}
+        - {name: return_to, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sso/callback:
+    get:
+      operationId: sign-in.sso_callback
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, step]
+      x-cauthy-failures: redirect
+      x-cauthy-sets-cookies: [session]
+      x-cauthy-clears-cookies: [step]
+      parameters:
+        - {name: code, in: query, schema: {type: string}}
+        - {name: error, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /sign-in/sso/discover:
+    post:
+      operationId: sign-in.sso_discover
+      tags: [sign-in]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, format: email}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  connection: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me:
+    get:
+      operationId: me.get
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account]
+                properties:
+                  account: {type: object}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: me.save
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account, status]
+                properties:
+                  account: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/password:
+    post:
+      operationId: me.password
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      x-cauthy-clears-cookies: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newPassword, password]
+              properties:
+                newPassword: {type: string}
+                password: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [signedIn, status]
+                properties:
+                  signedIn: {type: boolean}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, weak_password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/email:
+    post:
+      operationId: me.email
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [email, status]
+                properties:
+                  email: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, email_unchanged, email_taken, step_up_required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/legal:
+    get:
+      operationId: me.legal
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pending]
+                properties:
+                  pending: {type: array}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/legal/accept:
+    post:
+      operationId: me.legal_accept
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kinds: {type: array}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/mfa/factors:
+    get:
+      operationId: me.mfa_factors
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [phoneChannels, totp]
+                properties:
+                  phone: {type: object}
+                  phoneChannels: {type: array}
+                  totp: {type: boolean}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/mfa/setup:
+    post:
+      operationId: me.mfa_setup
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [otpauthUri, qr, secret, status]
+                properties:
+                  otpauthUri: {type: string}
+                  qr: {type: string}
+                  secret: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, step_up_required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/mfa/verify:
+    post:
+      operationId: me.mfa_verify
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recoveryCodes, status]
+                properties:
+                  recoveryCodes: {type: array}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/mfa/phone:
+    post:
+      operationId: me.mfa_phone
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                channel: {type: string}
+                password: {type: string}
+                phone: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [channel, sentTo, status]
+                properties:
+                  channel: {type: string}
+                  sentTo: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, step_up_required, validation_error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/mfa/phone/verify:
+    post:
+      operationId: me.mfa_phone_verify
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recoveryCodes, status]
+                properties:
+                  recoveryCodes: {type: array}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/mfa/phone/remove:
+    post:
+      operationId: me.mfa_phone_remove
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string}
+        default:
+          description: Error (bad_request, step_up_required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/mfa/disable:
+    post:
+      operationId: me.mfa_disable
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string}
+        default:
+          description: Error (bad_request, step_up_required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/mfa/recovery-codes:
+    post:
+      operationId: me.mfa_recovery_codes
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recoveryCodes, status]
+                properties:
+                  recoveryCodes: {type: array}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, step_up_required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/identities:
+    get:
+      operationId: me.identities
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [identities]
+                properties:
+                  identities: {type: array}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  '/me/identities/link/{provider}':
+    get:
+      operationId: me.identities_link
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      x-cauthy-failures: redirect
+      x-cauthy-sets-cookies: [step]
+      parameters:
+        - {name: return_to, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/identities/unlink:
+    post:
+      operationId: me.identities_unlink
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider, status]
+                properties:
+                  provider: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_provider)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/passkeys:
+    get:
+      operationId: me.passkeys
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [passkeys]
+                properties:
+                  passkeys: {type: array}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/passkeys/add/begin:
+    post:
+      operationId: me.passkeys_add_begin
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      x-cauthy-sets-cookies: [step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kind: {type: string}
+                password: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [options, status]
+                properties:
+                  options: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, step_up_required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/passkeys/add/finish:
+    post:
+      operationId: me.passkeys_add_finish
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, step, crosssite, json]
+      x-cauthy-clears-cookies: [step]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credential]
+              properties:
+                credential: {type: object}
+                name: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [passkey, status]
+                properties:
+                  passkey: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, passkey_failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/passkeys/remove:
+    post:
+      operationId: me.passkeys_remove
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_passkey)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/agents:
+    get:
+      operationId: me.agents
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agents]
+                properties:
+                  agents: {type: array}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/agents/disconnect:
+    post:
+      operationId: me.agents_disconnect
+      tags: [me]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_agent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/upgrade:
+    post:
+      operationId: me.upgrade
+      tags: [me]
+      deprecated: true
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      x-cauthy-sets-cookies: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                name: {type: string}
+                password: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, status]
+                properties:
+                  session: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  '/me/upgrade/social/{provider}':
+    get:
+      operationId: me.upgrade_social
+      tags: [me]
+      deprecated: true
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      x-cauthy-failures: redirect
+      x-cauthy-sets-cookies: [step]
+      parameters:
+        - {name: return_to, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations:
+    get:
+      operationId: organizations.list
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      parameters:
+        - {name: system, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organizations]
+                properties:
+                  organizations: {type: array}
+        default:
+          description: Error (bad_request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/members:
+    get:
+      operationId: organizations.members
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      parameters:
+        - {name: id, in: query, schema: {type: string, format: uuid}, required: true}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members: {type: array}
+        default:
+          description: Error (bad_request, invalid_organization)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/roles:
+    get:
+      operationId: organizations.roles
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session]
+      parameters:
+        - {name: id, in: query, schema: {type: string, format: uuid}, required: true}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [roles]
+                properties:
+                  roles: {type: array}
+        default:
+          description: Error (bad_request, invalid_organization)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/check:
+    post:
+      operationId: organizations.check
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, organizationId, resource]
+              properties:
+                action: {type: string}
+                attributes: {type: object}
+                organizationId: {type: string, format: uuid}
+                ownerId: {type: string}
+                resource: {type: string}
+                resourceId: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [allowed, status]
+                properties:
+                  allowed: {type: boolean}
+                  reason: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_organization)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/rename:
+    post:
+      operationId: organizations.rename
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, organizationId]
+              properties:
+                name: {type: string}
+                organizationId: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organization, status]
+                properties:
+                  organization: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_organization)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/archive:
+    post:
+      operationId: organizations.archive
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId]
+              properties:
+                organizationId: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organizationId, status]
+                properties:
+                  organizationId: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_organization)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/delete:
+    post:
+      operationId: organizations.delete
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId]
+              properties:
+                organizationId: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organizationId, status]
+                properties:
+                  organizationId: {type: string}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_organization)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/members/add:
+    post:
+      operationId: organizations.members_add
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, organizationId, role]
+              properties:
+                email: {type: string, format: email}
+                locale: {type: string}
+                name: {type: string}
+                organizationId: {type: string, format: uuid}
+                role: {type: string}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [member, status]
+                properties:
+                  member: {type: object}
+                  status: {type: string}
+        default:
+          description: Error (bad_request, invalid_organization, invalid_role, member_exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/members/role:
+    post:
+      operationId: organizations.members_role
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, role, userId]
+              properties:
+                organizationId: {type: string, format: uuid}
+                role: {type: string}
+                userId: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role, status, userId]
+                properties:
+                  role: {type: string}
+                  status: {type: string}
+                  userId: {type: string}
+        default:
+          description: Error (bad_request, invalid_organization, invalid_member, invalid_role)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/members/remove:
+    post:
+      operationId: organizations.members_remove
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, userId]
+              properties:
+                organizationId: {type: string, format: uuid}
+                userId: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, userId]
+                properties:
+                  status: {type: string}
+                  userId: {type: string}
+        default:
+          description: Error (bad_request, invalid_organization, invalid_member)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/organizations/members/invite:
+    post:
+      operationId: organizations.members_invite
+      tags: [organizations]
+      x-cauthy-level: basic
+      x-cauthy-needs: [tenant, session, crosssite, json]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, userId]
+              properties:
+                locale: {type: string}
+                organizationId: {type: string, format: uuid}
+                userId: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, userId]
+                properties:
+                  status: {type: string}
+                  userId: {type: string}
+        default:
+          description: Error (bad_request, invalid_organization, invalid_member)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            field: {type: string}
+            reasons: {type: array, items: {type: string}}
