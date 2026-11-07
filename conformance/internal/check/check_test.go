@@ -135,3 +135,13 @@ func TestJSONFields(t *testing.T) {
 		t.Fatalf("json: %v", d)
 	}
 }
+
+func TestNotApplicableDoesNotMakeARunIncomplete(t *testing.T) {
+	reg := &Registry{}
+	reg.Add(Check{ID: "a.ok", Level: Basic, Run: func(*Ctx) Result { return Pass("") }})
+	reg.Add(Check{ID: "a.na", Level: Basic, Run: func(*Ctx) Result { return NA("other half") }})
+	rep := reg.Run(&Ctx{}, Basic)
+	if !rep.Passed() || !rep.Complete() {
+		t.Fatalf("n/a must not fail or incomplete a run:\n%s", rep.Text())
+	}
+}

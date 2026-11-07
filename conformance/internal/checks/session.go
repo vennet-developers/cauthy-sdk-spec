@@ -154,7 +154,7 @@ func RegisterSession(reg *check.Registry) {
 			return check.Fail(err.Error())
 		}
 		if m.JSON != nil && m.JSON["persistentSessions"] == true {
-			return check.Skip("the tenant allows persistent sessions; see session.remember_when_allowed")
+			return check.NA("the tenant allows persistent sessions; see session.remember_when_allowed")
 		}
 		_, res, stop := signedIn(c, slotRemember, true)
 		if stop != nil {
@@ -173,7 +173,7 @@ func RegisterSession(reg *check.Registry) {
 			return check.Fail(err.Error())
 		}
 		if m.JSON == nil || m.JSON["persistentSessions"] != true {
-			return check.Skip("the tenant does not allow persistent sessions")
+			return check.NA("the tenant does not allow persistent sessions")
 		}
 		_, res, stop := signedIn(c, slotRemember, true)
 		if stop != nil {

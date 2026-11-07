@@ -23,11 +23,15 @@ func (l Level) String() string {
 }
 
 // The statuses a result or a graded line can carry. A check itself answers
-// only pass, fail or skip; advisory is assigned by Run.
+// only pass, fail, skip or n/a; advisory is assigned by Run.
 const (
-	StatusPass     = "pass"
-	StatusFail     = "fail"
-	StatusSkip     = "skip"
+	StatusPass = "pass"
+	StatusFail = "fail"
+	StatusSkip = "skip"
+	// StatusNA is a check that does not apply to this backend (for example the
+	// other half of a pair that depends on a tenant setting). It does not make a
+	// run incomplete; a skip does.
+	StatusNA       = "n/a"
 	StatusAdvisory = "advisory"
 )
 
@@ -39,6 +43,7 @@ type Result struct {
 func Pass(detail string) Result { return Result{StatusPass, detail} }
 func Fail(detail string) Result { return Result{StatusFail, detail} }
 func Skip(detail string) Result { return Result{StatusSkip, detail} }
+func NA(detail string) Result   { return Result{StatusNA, detail} }
 
 type Check struct {
 	ID    string
@@ -78,7 +83,7 @@ func safeRun(c Check, ctx *Ctx) (res Result) {
 	}()
 	res = c.Run(ctx)
 	switch res.Status {
-	case StatusPass, StatusFail, StatusSkip:
+	case StatusPass, StatusFail, StatusSkip, StatusNA:
 	default:
 		res = Fail(fmt.Sprintf("invalid status %q: %s", res.Status, res.Detail))
 	}

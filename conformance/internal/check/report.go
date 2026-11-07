@@ -17,6 +17,9 @@ func (rep *Report) Text() string {
 	}
 	fmt.Fprintf(&b, "\n%d passed, %d failed, %d skipped, %d advisory — protocol %d, level %s\n",
 		counts[StatusPass], counts[StatusFail], counts[StatusSkip], counts[StatusAdvisory], rep.Protocol, rep.Level)
+	if counts[StatusNA] > 0 {
+		fmt.Fprintf(&b, "%d n/a (not applicable to this backend)\n", counts[StatusNA])
+	}
 	if n := rep.skipped(); n > 0 {
 		noun := "checks"
 		if n == 1 {
@@ -29,7 +32,7 @@ func (rep *Report) Text() string {
 
 // JSON renders the report with its verdict (passed, complete) and counts.
 func (rep *Report) JSON() []byte {
-	counts := map[string]int{StatusPass: 0, StatusFail: 0, StatusSkip: 0, StatusAdvisory: 0}
+	counts := map[string]int{StatusPass: 0, StatusFail: 0, StatusSkip: 0, StatusAdvisory: 0, StatusNA: 0}
 	for _, g := range rep.Results {
 		counts[g.Status]++
 	}

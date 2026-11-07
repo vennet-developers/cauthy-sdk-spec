@@ -27,7 +27,7 @@ func TestSessionChecks(t *testing.T) {
 	expect(t, reg, "session.remember_needs_tenant", fake.Knobs{}, "pass")
 	expect(t, reg, "session.remember_needs_tenant", fake.Knobs{RememberIgnoresTenant: true}, "fail")
 	expect(t, reg, "session.remember_when_allowed", fake.Knobs{PersistentAllowed: true}, "pass")
-	expect(t, reg, "session.remember_when_allowed", fake.Knobs{}, "skip")
+	expect(t, reg, "session.remember_when_allowed", fake.Knobs{}, "n/a")
 	expect(t, reg, "session.sign_out", fake.Knobs{}, "pass")
 }
 
