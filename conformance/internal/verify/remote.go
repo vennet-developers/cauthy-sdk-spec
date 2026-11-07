@@ -65,9 +65,15 @@ func NewRemoteKeys(fetch Fetcher, cooldown time.Duration, now func() time.Time) 
 	return &RemoteKeys{fetch: fetch, cooldown: cooldown, now: now}
 }
 
-// Key answers the key with kid, fetching the set when the rules allow.
+// Key answers the key with kid, fetching the set when the rules allow. The
+// fetch runs on its own context with its own FetchTimeout, so a caller that
+// gives up neither aborts it nor sets a cooldown for nothing; every caller
+// stops waiting on its own ctx.
 func (r *RemoteKeys) Key(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		r.mu.Lock()
 		now := r.now()
 		if r.set != nil && now.Sub(r.fetched) < r.maxAge {
@@ -76,45 +82,64 @@ func (r *RemoteKeys) Key(ctx context.Context, kid string) (*rsa.PublicKey, error
 				return key, err
 			}
 		}
-		if ch := r.running; ch != nil {
-			r.mu.Unlock()
-			select {
-			case <-ch:
-				continue
-			case <-ctx.Done():
-				return nil, ctx.Err()
+		ch := r.running
+		if ch == nil {
+			if !r.tried.IsZero() && now.Sub(r.tried) < r.cooldown {
+				set := r.set
+				r.mu.Unlock()
+				if set == nil {
+					return nil, fmt.Errorf("%w: the key set could not be fetched", ErrUnknownKid)
+				}
+				return set.Key(ctx, kid)
 			}
+			r.tried = now
+			ch = make(chan struct{})
+			r.running = ch
+			go r.refresh(context.WithoutCancel(ctx), ch)
 		}
-		if !r.tried.IsZero() && now.Sub(r.tried) < r.cooldown {
-			set := r.set
-			r.mu.Unlock()
-			if set == nil {
-				return nil, fmt.Errorf("%w: the key set could not be fetched", ErrUnknownKid)
-			}
-			return set.Key(ctx, kid)
-		}
-		r.tried = now
-		ch := make(chan struct{})
-		r.running = ch
 		r.mu.Unlock()
-
-		raw, maxAge, err := r.fetch(ctx)
-		var set *StaticKeys
-		if err == nil {
-			set, err = ParseJWKS(raw)
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-
-		r.mu.Lock()
-		if err == nil {
-			if maxAge <= 0 {
-				maxAge = DefaultJWKSAge
-			}
-			r.set, r.fetched, r.maxAge = set, r.now(), min(maxAge, MaxJWKSAge)
-		}
-		r.running = nil
-		close(ch)
-		r.mu.Unlock()
 	}
+}
+
+// refresh fetches and installs the set, then closes ch. A panic in the
+// fetcher counts as a failed fetch, so ch always closes.
+func (r *RemoteKeys) refresh(ctx context.Context, ch chan struct{}) {
+	var (
+		set    *StaticKeys
+		maxAge time.Duration
+	)
+	func() {
+		defer func() {
+			if recover() != nil {
+				set = nil
+			}
+		}()
+		ctx, cancel := context.WithTimeout(ctx, FetchTimeout)
+		defer cancel()
+		raw, age, err := r.fetch(ctx)
+		if err != nil {
+			return
+		}
+		if parsed, err := ParseJWKS(raw); err == nil {
+			set, maxAge = parsed, age
+		}
+	}()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if set != nil {
+		if maxAge <= 0 {
+			maxAge = DefaultJWKSAge
+		}
+		r.set, r.fetched, r.maxAge = set, r.now(), min(maxAge, MaxJWKSAge)
+	}
+	r.running = nil
+	close(ch)
 }
 
 // HTTPFetcher fetches the JWKS at url: GET, no redirects, a 200 only, at

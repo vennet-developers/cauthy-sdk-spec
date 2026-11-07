@@ -217,3 +217,67 @@ func TestMaxAgeOf(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoteKeysCancelledCallerSetsNoCooldown(t *testing.T) {
+	keys(t)
+	src, clk := &source{}, &clock{t: now}
+	src.set(setOf("a"), false)
+	r := NewRemoteKeys(src.fetch, 30*time.Second, clk.now)
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := r.Key(dead, "a"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+	if n := src.fetches.Load(); n != 0 {
+		t.Fatalf("a cancelled caller started %d fetches", n)
+	}
+	if _, err := r.Key(context.Background(), "a"); err != nil {
+		t.Fatalf("the next caller must fetch at once: %v", err)
+	}
+}
+
+func TestRemoteKeysFetchOutlivesItsFirstCaller(t *testing.T) {
+	keys(t)
+	src, clk := &source{gate: make(chan struct{})}, &clock{t: now}
+	src.set(setOf("a"), false)
+	r := NewRemoteKeys(src.fetch, 30*time.Second, clk.now)
+	first, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := r.Key(first, "a"); done <- err }()
+	for src.fetches.Load() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("the first caller must stop waiting on its own context, got %v", err)
+	}
+	other := make(chan error, 1)
+	go func() { _, err := r.Key(context.Background(), "a"); other <- err }()
+	time.Sleep(20 * time.Millisecond)
+	close(src.gate)
+	if err := <-other; err != nil {
+		t.Fatalf("a second caller must get the key from the same fetch: %v", err)
+	}
+	if n := src.fetches.Load(); n != 1 {
+		t.Fatalf("%d fetches, want 1", n)
+	}
+}
+
+func TestRemoteKeysSurvivesAPanickingFetcher(t *testing.T) {
+	keys(t)
+	clk := &clock{t: now}
+	var calls atomic.Int32
+	r := NewRemoteKeys(func(context.Context) ([]byte, time.Duration, error) {
+		if calls.Add(1) == 1 {
+			panic("boom")
+		}
+		return []byte(setOf("a")), time.Hour, nil
+	}, 30*time.Second, clk.now)
+	if _, err := r.Key(context.Background(), "a"); !errors.Is(err, ErrUnknownKid) {
+		t.Fatalf("want ErrUnknownKid after a panic, got %v", err)
+	}
+	clk.add(31 * time.Second)
+	if _, err := r.Key(context.Background(), "a"); err != nil {
+		t.Fatalf("after the cooldown the fetch must work again: %v", err)
+	}
+}
