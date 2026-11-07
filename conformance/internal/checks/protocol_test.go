@@ -1,0 +1,26 @@
+package checks
+
+import (
+	"testing"
+
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/fake"
+)
+
+func protocolRegistry() *check.Registry {
+	reg := &check.Registry{}
+	RegisterProtocol(reg)
+	return reg
+}
+
+func TestProtocolChecks(t *testing.T) {
+	reg := protocolRegistry()
+	expect(t, reg, "protocol.unknown_is_404", fake.Knobs{}, "pass")
+	expect(t, reg, "protocol.trailing_slash", fake.Knobs{}, "pass")
+	expect(t, reg, "protocol.trailing_slash", fake.Knobs{NoTrailingSlash: true}, "fail")
+	expect(t, reg, "protocol.head_as_get", fake.Knobs{}, "pass")
+	expect(t, reg, "protocol.get_on_post_is_405", fake.Knobs{}, "pass")
+	expect(t, reg, "protocol.get_on_post_is_405", fake.Knobs{HeadNot405: true}, "fail")
+	expect(t, reg, "protocol.no_store", fake.Knobs{}, "pass")
+	expect(t, reg, "protocol.no_store", fake.Knobs{NoCacheControl: true}, "fail")
+}
