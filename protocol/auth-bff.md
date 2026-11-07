@@ -5,12 +5,12 @@ A backend SDK serves these routes under one prefix (`/api/auth` by default). A c
 ## Conventions
 
 - Paths are relative to the prefix. The backend strips trailing slashes: `/session/` is `/session`. The bare prefix answers 404.
-- `HEAD` behaves as `GET`. A `GET` on a route that only takes `POST` answers `405` with `Allow: POST`. Any other method a route does not take answers `404` at `basic`; at `strict` it answers `405` with `Allow`. There is no CORS: a client is same-origin.
+- `HEAD` behaves as `GET`. Any method other than `POST` on a route that only takes `POST` answers `405` with `Allow: POST`. Other mismatched methods are unspecified at `basic`; the runner only checks the first rule. There is no CORS: a client is same-origin.
 - JSON in, JSON out, `content-type: application/json; charset=utf-8`, `cache-control: no-store` on every answer, except `GET /sign-in/mfa/push/events`, which streams `text/event-stream` (marked `stream: true` in the table). A redirect answers `302` with `Location`.
 - A route marked **auth** needs a signed-in session; without one it answers `401 unauthenticated`. It may set a renewed session cookie on the way out.
 - A route marked **own** is an own-screens route: it needs the backend to know its tenant. A backend without a tenant answers `500 not_configured`.
 - A route marked **step** reads a short-lived step cookie set by an earlier route; without it, `400 step_expired`.
-- Routes marked `failures: redirect` in the table are browser redirects: they never answer JSON errors. A missing step cookie, a missing session or a refusal sends the browser back with `?auth_error=<code>`.
+- Routes marked `failures: redirect` in the table are browser redirects: their failures are redirects with `?auth_error=<code>`, except `500 not_configured` (JSON) on a backend without a tenant and a plain-text `404` for an unknown provider. A missing step cookie, a missing session or a refusal sends the browser back with `?auth_error=<code>`.
 
 ## Levels
 
