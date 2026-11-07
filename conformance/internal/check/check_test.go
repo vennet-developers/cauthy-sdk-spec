@@ -139,9 +139,25 @@ func TestJSONFields(t *testing.T) {
 func TestNotApplicableDoesNotMakeARunIncomplete(t *testing.T) {
 	reg := &Registry{}
 	reg.Add(Check{ID: "a.ok", Level: Basic, Run: func(*Ctx) Result { return Pass("") }})
-	reg.Add(Check{ID: "a.na", Level: Basic, Run: func(*Ctx) Result { return NA("other half") }})
+	reg.Add(Check{ID: "a.na", Level: Basic, NAPair: "a.other", Run: func(*Ctx) Result { return NA("other half") }})
 	rep := reg.Run(&Ctx{}, Basic)
 	if !rep.Passed() || !rep.Complete() {
 		t.Fatalf("n/a must not fail or incomplete a run:\n%s", rep.Text())
+	}
+}
+
+func TestNAWithoutAPairBecomesASkip(t *testing.T) {
+	reg := &Registry{}
+	reg.Add(Check{ID: "a.lone", Level: Basic, Run: func(*Ctx) Result { return NA("nothing to pair") }})
+	reg.Add(Check{ID: "a.paired", Level: Basic, NAPair: "a.other", Run: func(*Ctx) Result { return NA("the other half applies") }})
+	rep := reg.Run(&Ctx{}, Basic)
+	if rep.Results[0].Status != StatusSkip || !strings.Contains(rep.Results[0].Detail, "n/a is only for paired checks") {
+		t.Fatalf("an unpaired n/a must become a skip: %+v", rep.Results[0])
+	}
+	if rep.Results[1].Status != StatusNA {
+		t.Fatalf("a paired n/a stays n/a: %+v", rep.Results[1])
+	}
+	if rep.Complete() {
+		t.Fatal("the unpaired n/a must leave the run incomplete")
 	}
 }

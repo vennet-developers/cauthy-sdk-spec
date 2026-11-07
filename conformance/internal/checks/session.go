@@ -148,7 +148,7 @@ func RegisterSession(reg *check.Registry) {
 		}
 		return check.Pass("no Max-Age without remember")
 	}})
-	reg.Add(check.Check{ID: "session.remember_needs_tenant", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
+	reg.Add(check.Check{ID: "session.remember_needs_tenant", Group: "session", Level: check.Basic, NAPair: "session.remember_when_allowed", Run: func(c *check.Ctx) check.Result {
 		m, err := c.Methods()
 		if err != nil {
 			return check.Fail(err.Error())
@@ -167,7 +167,7 @@ func RegisterSession(reg *check.Registry) {
 		}
 		return check.Pass("remember is ignored when the tenant does not allow it")
 	}})
-	reg.Add(check.Check{ID: "session.remember_when_allowed", Group: "session", Level: check.Basic, Run: func(c *check.Ctx) check.Result {
+	reg.Add(check.Check{ID: "session.remember_when_allowed", Group: "session", Level: check.Basic, NAPair: "session.remember_needs_tenant", Run: func(c *check.Ctx) check.Result {
 		m, err := c.Methods()
 		if err != nil {
 			return check.Fail(err.Error())

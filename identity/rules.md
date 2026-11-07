@@ -20,7 +20,7 @@ A person is `sub`, a UUID Cauthy never reuses. An application keys its own rows 
 
 The session's `user.emailVerified` says which case a person is in, and `GET /v1/oauth/userinfo` answers `email_verified`, `email_verify_by` (UTC) and `restricted`. An application that needs a verified address requires the first setting, and says so in its guide.
 
-**The access token does not carry `email_verified` today.** Its claims are `sub`, `tid`, `roles`, `email` and the registered ones. The `email_verified` claim arrives with stage 2 of the five-minute plan; until then an application reads it from the session or from `userinfo`, never from the token.
+**The access token does not carry `email_verified` today.** Its claims are, among them, `sub`, `tid`, `roles` and `email`. The `email_verified` claim arrives with a later protocol version; until then an application reads it from the session or from `userinfo`, never from the token.
 
 ## What a client never receives
 
@@ -41,8 +41,8 @@ Two needs belong to the application's Pact link, not to a tenant setting:
 
 | Need | Link field | Notes |
 | --- | --- | --- |
-| Only the system's own proof signs people in | `sign_in.system_proof: required` (`off`, `auto` or `required`) | `auto` leaves the choice to Cauthy (its exact rule is defined by Cauthy, not by this repository). The boolean `sign_in.require_system_proof` stays `false` under `auto`. Needs a `service` block |
+| Only the system's own proof signs people in | `sign_in.require_system_proof: true \| false \| auto` (the graph carries `system_proof: required \| auto \| off` beside the boolean) | `auto`: Cauthy turns the requirement on by itself after the first sign-in through this client that carried the proof, and records when; until then, and for readers that know only the boolean, `require_system_proof` stays `false`. Stage 1 SDKs read only `true` or `false`. Needs a `service` block |
 | People may stay signed in | `sign_in.persistent_sessions: true` | The contract owns the switch: changing the client by hand answers `409 from_contract` |
 | A verified email for this application | `sign_in.require_verified_email: true` | |
 
-Everything in the table above except `persistent_sessions` and the boolean `require_system_proof` is new in stage 2 and is read by SDKs from then on; see [`contract/pact.md`](../contract/pact.md).
+Everything in the table above except `persistent_sessions` and the boolean `require_system_proof` (`require_verified_email`, `system_proof`, `auto`) is not read by stage 1 SDKs; see [`contract/pact.md`](../contract/pact.md).

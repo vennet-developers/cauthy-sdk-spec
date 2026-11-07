@@ -1,5 +1,5 @@
 // Package check is the frame every conformance check hangs on: a check runs
-// against a context and answers pass, fail or skip; the registry grades the
+// against a context and answers pass, fail, skip or n/a; the registry grades the
 // answers by level.
 package check
 
@@ -49,7 +49,10 @@ type Check struct {
 	ID    string
 	Group string
 	Level Level
-	Run   func(*Ctx) Result
+	// NAPair is the ID of the check that applies when this one does not. Only a
+	// check with a pair may answer n/a; anywhere else n/a hides a gap.
+	NAPair string
+	Run    func(*Ctx) Result
 }
 
 type Registry struct{ checks []Check }
@@ -83,7 +86,11 @@ func safeRun(c Check, ctx *Ctx) (res Result) {
 	}()
 	res = c.Run(ctx)
 	switch res.Status {
-	case StatusPass, StatusFail, StatusSkip, StatusNA:
+	case StatusPass, StatusFail, StatusSkip:
+	case StatusNA:
+		if c.NAPair == "" {
+			res = Skip("n/a is only for paired checks: " + res.Detail)
+		}
 	default:
 		res = Fail(fmt.Sprintf("invalid status %q: %s", res.Status, res.Detail))
 	}

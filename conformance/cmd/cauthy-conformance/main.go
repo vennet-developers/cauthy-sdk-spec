@@ -34,11 +34,28 @@ func main() {
 	flag.StringVar(&o.table, "table", defaultTable(), "path to protocol/routes.yaml")
 	flag.StringVar(&o.jsonOut, "json", "", "also write the report as JSON to this file")
 	flag.StringVar(&o.jwksPath, "jwks-path", "", "contract mode: the JWKS path the backend serves")
+	flag.Usage = usage
 	flag.Parse()
 	// The password is read from the environment only: a flag would end up in
 	// shell history and the process list.
 	o.password = os.Getenv("CONFORMANCE_PASSWORD")
-	os.Exit(run(o, os.Stdout))
+	os.Exit(run(o, os.Stdout, os.Stderr))
+}
+
+func usage() {
+	w := flag.CommandLine.Output()
+	fmt.Fprintln(w, "usage: cauthy-conformance --target URL --origin URL [--email ADDRESS] [--level basic|strict] [flags]")
+	flag.PrintDefaults()
+	fmt.Fprint(w, `
+environment:
+  CONFORMANCE_PASSWORD  the test account's password (never a flag)
+
+exit codes:
+  0  every check of the level passed and none was skipped
+  1  a check failed
+  2  usage or configuration error
+  3  nothing failed, but a check at or below the level was skipped
+`)
 }
 
 // defaultTable finds protocol/routes.yaml next to a checkout, or in the binary's directory.
@@ -52,9 +69,10 @@ func defaultTable() string {
 	return filepath.Join(filepath.Dir(exe), "routes.yaml")
 }
 
-func run(o options, out io.Writer) int {
+// run writes the report to out and usage or configuration errors to errOut.
+func run(o options, out, errOut io.Writer) int {
 	if o.target == "" || o.origin == "" {
-		fmt.Fprintln(out, "--target and --origin are required")
+		fmt.Fprintln(errOut, "--target and --origin are required")
 		return 2
 	}
 	level := check.Basic
@@ -63,12 +81,12 @@ func run(o options, out io.Writer) int {
 	case "strict":
 		level = check.Strict
 	default:
-		fmt.Fprintf(out, "unknown level %q (basic or strict)\n", o.level)
+		fmt.Fprintf(errOut, "unknown level %q (basic or strict)\n", o.level)
 		return 2
 	}
 	table, err := routes.Load(o.table)
 	if err != nil {
-		fmt.Fprintln(out, err)
+		fmt.Fprintln(errOut, err)
 		return 2
 	}
 	ctx := &check.Ctx{Client: client.New(o.target, o.origin), Table: table, Email: o.email, Password: o.password, JWKSPath: o.jwksPath}
@@ -78,7 +96,7 @@ func run(o options, out io.Writer) int {
 	fmt.Fprint(out, rep.Text())
 	if o.jsonOut != "" {
 		if err := os.WriteFile(o.jsonOut, rep.JSON(), 0o644); err != nil {
-			fmt.Fprintln(out, err)
+			fmt.Fprintln(errOut, err)
 			return 2
 		}
 	}

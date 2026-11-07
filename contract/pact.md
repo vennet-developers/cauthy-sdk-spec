@@ -14,21 +14,21 @@ Pact is Vennet's contract network; `core-contracts` holds the manifests and link
 
 The tenant is the link's `identity.tenant` (an id), turned into a slug through the provider's `tenants` list.
 
-### Link fields accepted by core-contracts (stage 2)
+### Link fields accepted for core-contracts (not yet on its main; Cauthy and SDKs read them in a later version)
 
 | Field | Meaning |
 | --- | --- |
-| `identity.tenant` by slug | The link names the tenant by its slug. The graph adds `tenant_id` when the slug is listed, or `create_tenant: true` when it is new and the provider is Cauthy. The nil UUID is refused |
+| `identity.tenant` by slug | The link names the tenant by its slug. `identity.tenant` still accepts a UUID besides a slug. The graph adds `tenant_id` when the slug is listed, or `create_tenant: true` when it is new and the provider is Cauthy. The nil UUID is refused |
 | `sign_in.require_verified_email` | Always present in the graph; the application asks for verified emails |
-| `sign_in.system_proof: off \| auto \| required` | Replaces the boolean. The old `require_system_proof` stays `false` under `auto` |
+| `sign_in.system_proof: off \| auto \| required` | Added beside the boolean, which stays. Under `auto` Cauthy turns the requirement on by itself after the first sign-in through this client that carried the proof, and records when; until then, and for readers that know only the boolean, `require_system_proof` stays `false` |
 
-An SDK reads these from the graph when they are present and keeps reading the boolean `require_system_proof` when they are not.
+Until then an SDK needs the link to name its tenant by UUID; a slug-named link is refused at start (the SDK looks the id up in the provider's `tenants` list).
 
 ## When it refuses to start
 
 The SDK stops with a named configuration error, before serving a request, when:
 
-1. The graph is not a context graph, or lacks the system or `cauthy`.
+1. `contract.system` is not a valid system id, the graph is not a context graph, or it lacks the system or `cauthy`.
 2. No link from this system to `cauthy` carries a `sign_in` block; or several do and none was named.
 3. The graph does not list a slug for the tenant the link names.
 4. The link names no redirect URI.
@@ -36,7 +36,8 @@ The SDK stops with a named configuration error, before serving a request, when:
 6. Any of these variables is set alongside a contract: `CAUTHY_ISSUER`, `CAUTHY_CLIENT_ID`, `CAUTHY_CLIENT_SECRET`, `CAUTHY_SECRET`, `CAUTHY_SYSTEM`, `CAUTHY_TENANT`, `CAUTHY_SYSTEM_KEY`, `CAUTHY_SYSTEM_KEY_ID`. Two sources of the same thing are how an application signs people in through a client nobody meant. An option passed in code that the contract owns is refused the same way.
 7. `PACT_ROOT_KEY` is missing, or is shorter than 32 characters (32 random bytes in base64url are 43).
 8. The link has a `service` block and the application passes no key store.
-9. The key store keeps no key after writing one, or holds a key the root key cannot open (rotate with `PACT_ROOT_KEY_PREVIOUS`).
+9. The `service` block names no `jwks_url` and neither does the system.
+10. The key store keeps no key after writing one, or holds a key the root key cannot open (rotate with `PACT_ROOT_KEY_PREVIOUS`).
 
 ## Keys
 
@@ -52,7 +53,7 @@ The application proves itself to Cauthy in two steps.
 1. It asks for its own token at `<issuer>/v1/oauth/token` with `grant_type=client_credentials` and a **client assertion** (`private_key_jwt`, RFC 7523) signed with its current key: `alg` RS256 with `kid`; `iss` and `sub` both the service client id (`pact.<link id>.service`); `aud` the token endpoint; `jti`; `iat`; `exp` = `iat` + 2 minutes (Cauthy refuses more than 5, and a repeated `jti`).
 2. Cauthy answers an access token for the system. It lives 10 minutes and is renewed shortly before it ends.
 
-Every call the backend passes to Cauthy on behalf of a person carries that access token in `X-Cauthy-System-Token`. Cauthy accepts it when it is valid, of the same tenant, and belongs to the system that owns the client the call names. Without a valid proof the header is ignored.
+Every call the backend passes to Cauthy on behalf of a person carries that access token in `X-Cauthy-System-Token`. Cauthy accepts it when it is valid, of the same tenant, and belongs to the system that owns the client the call names. Without a valid proof Cauthy ignores the person's address the application passes on (`X-Cauthy-Client-IP`).
 
 With the proof required, a code exchange for the link's sign-in client, and every sign-in the application's own screens make naming that client, is refused without it (`403 system_proof_required` in both cases).
 

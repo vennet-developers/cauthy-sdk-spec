@@ -19,6 +19,8 @@ The specification behind every Cauthy SDK, and the suite that proves an SDK foll
       --target http://localhost:3999/api/auth --origin http://localhost:3999 \
       --email member@example.com --level basic
 
+`--json report.json` also writes the report as JSON. `--jwks-path` names the JWKS path of a backend in contract mode. Build with the Go version in `conformance/go.mod`.
+
 It needs a backend that serves the protocol and one test account in its tenant. The account must:
 
 - sign in with a password (not only a social or passkey login);

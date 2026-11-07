@@ -16,6 +16,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: conformance/go.mod
+          cache-dependency-path: conformance/go.sum
       - run: go vet ./...
       - run: go test -race ./...
       - name: openapi/auth-bff.yaml is up to date

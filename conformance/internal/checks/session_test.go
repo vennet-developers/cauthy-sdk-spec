@@ -28,6 +28,7 @@ func TestSessionChecks(t *testing.T) {
 	expect(t, reg, "session.remember_needs_tenant", fake.Knobs{RememberIgnoresTenant: true}, "fail")
 	expect(t, reg, "session.remember_when_allowed", fake.Knobs{PersistentAllowed: true}, "pass")
 	expect(t, reg, "session.remember_when_allowed", fake.Knobs{}, "n/a")
+	expect(t, reg, "session.remember_needs_tenant", fake.Knobs{PersistentAllowed: true}, "n/a")
 	expect(t, reg, "session.sign_out", fake.Knobs{}, "pass")
 }
 
@@ -117,5 +118,24 @@ func TestSecureIsRequiredOnAnHTTPSOrigin(t *testing.T) {
 	}
 	if r := httpsRun(t, reg, "session.cookie_attributes", fake.Knobs{NoSecure: true}); r.Status != "fail" {
 		t.Fatalf("no Secure on https must fail: %s %s", r.Status, r.Detail)
+	}
+}
+
+// n/a is for the one pair of checks whose applicability depends on the tenant:
+// every run has exactly one of them n/a, and no other check may be.
+func TestNAAppearsOnlyForTheRememberPair(t *testing.T) {
+	for _, k := range []fake.Knobs{{}, {PersistentAllowed: true}} {
+		ctx, _ := ctxFor(t, k)
+		reg := &check.Registry{}
+		RegisterAll(reg)
+		var na []string
+		for _, g := range reg.Run(ctx, check.Strict).Results {
+			if g.Status == check.StatusNA {
+				na = append(na, g.ID)
+			}
+		}
+		if len(na) != 1 || !strings.HasPrefix(na[0], "session.remember_") {
+			t.Fatalf("with %+v n/a must be exactly one session.remember_* check, got %v", k, na)
+		}
 	}
 }
