@@ -16,11 +16,24 @@ func (rep *Report) Text() string {
 		fmt.Fprintf(&b, "%-8s %s  %s\n", strings.ToUpper(g.Status), g.ID, g.Detail)
 	}
 	fmt.Fprintf(&b, "\n%d passed, %d failed, %d skipped, %d advisory — protocol %d, level %s\n",
-		counts["pass"], counts["fail"], counts["skip"], counts["advisory"], rep.Protocol, rep.Level)
+		counts[StatusPass], counts[StatusFail], counts[StatusSkip], counts[StatusAdvisory], rep.Protocol, rep.Level)
+	if n := rep.skippedBasic(); n > 0 {
+		fmt.Fprintf(&b, "INCOMPLETE: %d basic checks skipped\n", n)
+	}
 	return b.String()
 }
 
+// JSON renders the report with its verdict (passed, complete) and counts.
 func (rep *Report) JSON() []byte {
-	raw, _ := json.MarshalIndent(rep, "", "  ")
+	counts := map[string]int{StatusPass: 0, StatusFail: 0, StatusSkip: 0, StatusAdvisory: 0}
+	for _, g := range rep.Results {
+		counts[g.Status]++
+	}
+	raw, _ := json.MarshalIndent(struct {
+		*Report
+		Passed   bool           `json:"passed"`
+		Complete bool           `json:"complete"`
+		Counts   map[string]int `json:"counts"`
+	}{rep, rep.Passed(), rep.Complete(), counts}, "", "  ")
 	return raw
 }

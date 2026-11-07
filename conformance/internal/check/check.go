@@ -4,6 +4,9 @@
 package check
 
 import (
+	"fmt"
+	"slices"
+
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/client"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/routes"
 )
@@ -31,14 +34,23 @@ type Ctx struct {
 	JWKSPath string // "" when the backend is not in contract mode
 }
 
+// The statuses a result or a graded line can carry. A check itself answers
+// only pass, fail or skip; advisory is assigned by Run.
+const (
+	StatusPass     = "pass"
+	StatusFail     = "fail"
+	StatusSkip     = "skip"
+	StatusAdvisory = "advisory"
+)
+
 type Result struct {
-	Status string `json:"status"` // pass | fail | skip | advisory
+	Status string `json:"status"` // one of the Status constants
 	Detail string `json:"detail"`
 }
 
-func Pass(detail string) Result { return Result{"pass", detail} }
-func Fail(detail string) Result { return Result{"fail", detail} }
-func Skip(detail string) Result { return Result{"skip", detail} }
+func Pass(detail string) Result { return Result{StatusPass, detail} }
+func Fail(detail string) Result { return Result{StatusFail, detail} }
+func Skip(detail string) Result { return Result{StatusSkip, detail} }
 
 type Check struct {
 	ID    string
@@ -49,10 +61,41 @@ type Check struct {
 
 type Registry struct{ checks []Check }
 
-func (r *Registry) Add(c Check) { r.checks = append(r.checks, c) }
+// Add registers a check. An empty or repeated ID is a programming error and
+// panics.
+func (r *Registry) Add(c Check) {
+	if c.ID == "" {
+		panic("check: empty ID")
+	}
+	for _, have := range r.checks {
+		if have.ID == c.ID {
+			panic("check: duplicate ID " + c.ID)
+		}
+	}
+	r.checks = append(r.checks, c)
+}
 
-// All returns the registered checks in the order they were added.
-func (r *Registry) All() []Check { return r.checks }
+// All returns a copy of the registered checks in the order they were added.
+func (r *Registry) All() []Check { return slices.Clone(r.checks) }
+
+// safeRun runs one check; a panic or a missing Run is a failure, not a crash.
+func safeRun(c Check, ctx *Ctx) (res Result) {
+	if c.Run == nil {
+		return Fail("check has no Run")
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			res = Fail(fmt.Sprintf("check panicked: %v", p))
+		}
+	}()
+	res = c.Run(ctx)
+	switch res.Status {
+	case StatusPass, StatusFail, StatusSkip:
+	default:
+		res = Fail(fmt.Sprintf("invalid status %q: %s", res.Status, res.Detail))
+	}
+	return res
+}
 
 type Graded struct {
 	ID     string `json:"id"`
@@ -72,7 +115,7 @@ type Report struct {
 // Run executes every check. A failing check above the requested level is
 // reported as advisory and does not fail the run.
 func (r *Registry) Run(ctx *Ctx, level Level) *Report {
-	rep := &Report{Level: level.String()}
+	rep := &Report{Level: level.String(), Results: []Graded{}}
 	if ctx.Table != nil {
 		rep.Protocol = ctx.Table.Version
 	}
@@ -80,10 +123,10 @@ func (r *Registry) Run(ctx *Ctx, level Level) *Report {
 		rep.Target = ctx.Client.Target
 	}
 	for _, c := range r.checks {
-		res := c.Run(ctx)
+		res := safeRun(c, ctx)
 		status := res.Status
-		if status == "fail" && c.Level > level {
-			status = "advisory"
+		if status == StatusFail && c.Level > level {
+			status = StatusAdvisory
 		}
 		rep.Results = append(rep.Results, Graded{ID: c.ID, Group: c.Group, Level: c.Level.String(), Status: status, Detail: res.Detail})
 	}
@@ -92,9 +135,23 @@ func (r *Registry) Run(ctx *Ctx, level Level) *Report {
 
 func (rep *Report) Passed() bool {
 	for _, g := range rep.Results {
-		if g.Status == "fail" {
+		if g.Status == StatusFail {
 			return false
 		}
 	}
 	return true
+}
+
+// Complete is false when a basic-level check was skipped: the run proved less
+// than it should, even if nothing failed.
+func (rep *Report) Complete() bool { return rep.skippedBasic() == 0 }
+
+func (rep *Report) skippedBasic() int {
+	n := 0
+	for _, g := range rep.Results {
+		if g.Status == StatusSkip && g.Level == Basic.String() {
+			n++
+		}
+	}
+	return n
 }
