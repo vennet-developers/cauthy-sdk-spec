@@ -2,6 +2,7 @@ package checks
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
 )
@@ -60,5 +61,17 @@ func RegisterStrict(reg *check.Registry) {
 			return check.Fail(fmt.Sprintf("next=%v is not one of done, mfa, verify_email, code, passkey, redirect", res.JSON["next"]))
 		}
 		return check.Pass(fmt.Sprintf("next=%v", res.JSON["next"]))
+	}})
+	reg.Add(check.Check{ID: "strict.no_store_everywhere", Group: "strict", Level: check.Strict, Run: func(c *check.Ctx) check.Result {
+		answers, err := sampleAnswers(c)
+		if err != nil {
+			return check.Fail(err.Error())
+		}
+		for _, a := range answers {
+			if !strings.Contains(a.res.Header.Get("Cache-Control"), "no-store") {
+				return check.Fail(fmt.Sprintf("%s: Cache-Control=%q, want no-store", a.label, a.res.Header.Get("Cache-Control")))
+			}
+		}
+		return check.Pass(fmt.Sprintf("no-store on %d kinds of answer, the plain-text 404 and 405 included", len(answers)))
 	}})
 }

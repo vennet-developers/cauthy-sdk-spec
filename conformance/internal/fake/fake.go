@@ -47,6 +47,7 @@ type Knobs struct {
 	JSONAsTextPlain       bool // JSON answers carry content-type text/plain
 	NoErrorField          bool // errors never carry "field"
 	NoProtocolOn404       bool // the plain-text 404 lacks Cauthy-Protocol
+	PlainTextCacheable    bool // the plain-text 404 and 405 carry no Cache-Control, as cauthy-auth 0.42 answers them
 	LogoutNotExempt       bool // POST /logout needs X-Cauthy-Request at strict
 	LogoutMissing         bool // /logout is not served: 404
 }
@@ -157,6 +158,9 @@ func (s *Server) text(w http.ResponseWriter, status int, msg string) {
 	s.headers(w)
 	if s.Knobs.NoProtocolOn404 && status == 404 {
 		w.Header().Del("Cauthy-Protocol")
+	}
+	if s.Knobs.PlainTextCacheable {
+		w.Header().Del("Cache-Control")
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)

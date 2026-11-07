@@ -20,6 +20,17 @@ func TestStrictChecks(t *testing.T) {
 	expect(t, reg, "strict.logout_exempt", fake.Knobs{Strict: true, LogoutMissing: true}, "fail")
 	expect(t, reg, "strict.next_on_sign_in", fake.Knobs{Strict: true}, "pass")
 	expect(t, reg, "strict.next_on_sign_in", fake.Knobs{}, "fail")
+	expect(t, reg, "strict.no_store_everywhere", fake.Knobs{Strict: true}, "pass")
+	expect(t, reg, "strict.no_store_everywhere", fake.Knobs{Strict: true, PlainTextCacheable: true}, "fail")
+	expect(t, reg, "strict.no_store_everywhere", fake.Knobs{Strict: true, NoCacheControl: true}, "fail")
+}
+
+func TestNoStoreEverywhereNamesThePlainTextAnswer(t *testing.T) {
+	reg := &check.Registry{}
+	RegisterStrict(reg)
+	if d := detailOf(t, reg, "strict.no_store_everywhere", fake.Knobs{Strict: true, PlainTextCacheable: true}); !strings.Contains(d, "GET /nope-does-not-exist (404)") {
+		t.Fatalf("detail does not name the 404 answer: %s", d)
+	}
 }
 
 func TestProtocolHeaderIsCheckedOnSeveralAnswers(t *testing.T) {

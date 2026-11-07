@@ -65,22 +65,30 @@ func RegisterProtocol(reg *check.Registry) {
 		if err != nil {
 			return check.Fail(err.Error())
 		}
+		kinds := 0
 		for _, a := range answers {
-			if !strings.Contains(a.res.Header.Get("Cache-Control"), "no-store") {
-				return check.Fail(fmt.Sprintf("%s: Cache-Control=%q, want no-store", a.label, a.res.Header.Get("Cache-Control")))
+			// At basic, the plain-text 404 and 405 may be cacheable: cauthy-auth
+			// 0.42 sends them without Cache-Control, and they carry nothing of
+			// the person. strict.no_store_everywhere asks it of them too.
+			if !a.text {
+				kinds++
+				if !strings.Contains(a.res.Header.Get("Cache-Control"), "no-store") {
+					return check.Fail(fmt.Sprintf("%s: Cache-Control=%q, want no-store", a.label, a.res.Header.Get("Cache-Control")))
+				}
 			}
 			// Only an answer with a JSON body must say so; the plain-text 404 and 405 and a redirect need not.
 			if a.res.JSON != nil && !strings.HasPrefix(a.res.Header.Get("Content-Type"), "application/json") {
 				return check.Fail(fmt.Sprintf("%s: Content-Type=%q on a JSON answer, want application/json", a.label, a.res.Header.Get("Content-Type")))
 			}
 		}
-		return check.Pass(fmt.Sprintf("no-store on %d kinds of answer, JSON where the body is JSON", len(answers)))
+		return check.Pass(fmt.Sprintf("no-store on %d kinds of answer (JSON and redirect), JSON where the body is JSON", kinds))
 	}})
 }
 
 type answer struct {
 	label string
 	res   *client.Response
+	text  bool // the plain-text 404 or 405
 }
 
 // sampleAnswers gets one answer of each kind a backend gives: a JSON read, the
@@ -93,7 +101,7 @@ func sampleAnswers(c *check.Ctx) ([]answer, error) {
 		if err != nil {
 			return fmt.Errorf("%s: %w", label, err)
 		}
-		out = append(out, answer{label, res})
+		out = append(out, answer{label: label, res: res, text: res.Status == 404 || res.Status == 405})
 		return nil
 	}
 	b := c.Client.Fresh()

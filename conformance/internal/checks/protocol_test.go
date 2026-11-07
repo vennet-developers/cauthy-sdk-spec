@@ -50,3 +50,12 @@ func TestNoStoreNamesTheFirstAnswerThatLacksIt(t *testing.T) {
 		t.Fatalf("detail does not name the answer: %s", d)
 	}
 }
+
+// cauthy-auth 0.42 sends no-store on every JSON answer and redirect but not on
+// its plain-text 404 and 405 (cauthy.ts: new Response('Not found', { status: 404 })).
+// That is basic; no-store on every answer is strict.
+func TestNoStoreAtBasicLeavesPlainTextAnswersToStrict(t *testing.T) {
+	reg := protocolRegistry()
+	expect(t, reg, "protocol.no_store", fake.Knobs{PlainTextCacheable: true}, "pass")
+	expect(t, reg, "protocol.no_store", fake.Knobs{PlainTextCacheable: true, NoCacheControl: true}, "fail")
+}
