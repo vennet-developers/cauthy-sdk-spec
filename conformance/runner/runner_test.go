@@ -71,6 +71,11 @@ func TestRunUsageErrors(t *testing.T) {
 		if !errors.Is(err, runner.ErrUsage) || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: want ErrUsage naming %s, got %v", name, tc.want, err)
 		}
+		// The message alone, for a program that prints its own prefix.
+		var usage *runner.UsageError
+		if !errors.As(err, &usage) || !strings.Contains(usage.Msg, tc.want) || strings.Contains(usage.Msg, "conformance usage") {
+			t.Errorf("%s: want a *UsageError, got %#v", name, err)
+		}
 	}
 }
 

@@ -16,7 +16,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"strings"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/runner"
 )
@@ -75,8 +74,9 @@ func run(ctx context.Context, o options, out, errOut io.Writer) int {
 	}
 	res, err := runner.Run(ctx, runner.Options{Target: o.target, Origin: o.origin, Email: o.email, Password: o.password,
 		Level: o.level, JWKSPath: o.jwksPath, Table: table})
-	if errors.Is(err, runner.ErrUsage) {
-		fmt.Fprintln(errOut, strings.TrimPrefix(err.Error(), runner.ErrUsage.Error()+": "))
+	var usage *runner.UsageError
+	if errors.As(err, &usage) {
+		fmt.Fprintln(errOut, usage.Msg)
 		return 2
 	}
 	if err != nil {

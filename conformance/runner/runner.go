@@ -75,8 +75,20 @@ func (o Outcome) ExitCode() int {
 	return 0
 }
 
-// ErrUsage wraps every error Run answers before driving anything.
+// ErrUsage matches every error Run answers before driving anything
+// (errors.Is); each is a *UsageError.
 var ErrUsage = errors.New("conformance usage")
+
+// UsageError is an error Run answers before driving anything. Msg names the
+// flag or input to fix, without a prefix, for a program that prints its own.
+type UsageError struct{ Msg string }
+
+func (e *UsageError) Error() string { return ErrUsage.Error() + ": " + e.Msg }
+
+// Is makes errors.Is(err, ErrUsage) true.
+func (e *UsageError) Is(target error) bool { return target == ErrUsage }
+
+func usagef(format string, a ...any) error { return &UsageError{fmt.Sprintf(format, a...)} }
 
 // Run drives the backend and grades it. Once ctx is done no request starts,
 // the checks left are skipped, and Run answers the partial Outcome with
@@ -84,9 +96,9 @@ var ErrUsage = errors.New("conformance usage")
 func Run(ctx context.Context, o Options) (Outcome, error) {
 	switch {
 	case o.Target == "":
-		return Outcome{}, fmt.Errorf("%w: --target is required (the backend's prefix, e.g. http://localhost:3999/api/auth)", ErrUsage)
+		return Outcome{}, usagef("--target is required (the backend's prefix, e.g. http://localhost:3999/api/auth)")
 	case o.Origin == "":
-		return Outcome{}, fmt.Errorf("%w: --origin is required (the application's origin, e.g. http://localhost:3999)", ErrUsage)
+		return Outcome{}, usagef("--origin is required (the application's origin, e.g. http://localhost:3999)")
 	}
 	level := check.Basic
 	switch o.Level {
@@ -94,7 +106,7 @@ func Run(ctx context.Context, o Options) (Outcome, error) {
 	case Strict:
 		level = check.Strict
 	default:
-		return Outcome{}, fmt.Errorf("%w: --level is basic or strict, not %q", ErrUsage, o.Level)
+		return Outcome{}, usagef("--level is basic or strict, not %q", o.Level)
 	}
 	var table *routes.Table
 	var err error
@@ -104,7 +116,7 @@ func Run(ctx context.Context, o Options) (Outcome, error) {
 		table, err = routes.Embedded()
 	}
 	if err != nil {
-		return Outcome{}, fmt.Errorf("%w: the route table: %v", ErrUsage, err)
+		return Outcome{}, usagef("the route table: %v", err)
 	}
 	c := &check.Ctx{Client: client.NewContext(ctx, o.Target, o.Origin), Table: table, Email: o.Email, Password: o.Password, JWKSPath: o.JWKSPath}
 	reg := &check.Registry{}
