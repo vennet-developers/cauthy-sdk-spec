@@ -7,7 +7,7 @@ import (
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
 )
 
-var validNext = map[string]bool{"done": true, "mfa": true, "verify_email": true, "code": true, "passkey": true, "redirect": true}
+var validNext = map[string]bool{"done": true, "mfa": true, "verify_email": true, "code": true, "passkey": true, "one_tap": true, "redirect": true}
 
 func RegisterStrict(reg *check.Registry) {
 	reg.Add(check.Check{ID: "strict.protocol_header", Group: "strict", Level: check.Strict, Run: func(c *check.Ctx) check.Result {
@@ -58,7 +58,7 @@ func RegisterStrict(reg *check.Registry) {
 		}
 		next, _ := res.JSON["next"].(string)
 		if !validNext[next] {
-			return check.Fail(fmt.Sprintf("next=%v is not one of done, mfa, verify_email, code, passkey, redirect", res.JSON["next"]))
+			return check.Fail(fmt.Sprintf("next=%v is not one of done, mfa, verify_email, code, passkey, one_tap, redirect", res.JSON["next"]))
 		}
 		return check.Pass(fmt.Sprintf("next=%v", res.JSON["next"]))
 	}})

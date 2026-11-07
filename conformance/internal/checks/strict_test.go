@@ -58,3 +58,14 @@ func TestAllRegistersEveryGroup(t *testing.T) {
 		}
 	}
 }
+
+func TestValidNextHasEverySignInOutcome(t *testing.T) {
+	for _, n := range []string{"done", "mfa", "verify_email", "code", "passkey", "one_tap", "redirect"} {
+		if !validNext[n] {
+			t.Errorf("next=%s must be valid", n)
+		}
+	}
+	if validNext["other"] {
+		t.Error("an unknown next must not be valid")
+	}
+}

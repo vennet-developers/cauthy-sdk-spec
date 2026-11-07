@@ -83,7 +83,17 @@ An own-screens sign-in route answers one of:
 | `sent` | `sentTo?`, `channel?` | A code, link or push went out |
 | `started` | `options` or `clientId` + `nonce` | A passkey or Google One Tap ceremony began |
 
-At `strict`, every such answer also carries `next`: `done`, `mfa`, `verify_email`, `code`, `passkey`, `redirect`.
+At `strict`, every such answer also carries `next`, which tells the page what to do:
+
+| `next` | What the page does |
+| --- | --- |
+| `done` | Nothing more: the session is open |
+| `mfa` | Ask for the second step |
+| `verify_email` | Ask the person to confirm the address |
+| `code` | Ask for the code that was sent |
+| `passkey` | Run the passkey ceremony |
+| `one_tap` | Show Google's prompt, then post the credential it returns |
+| `redirect` | Go to the URL in the answer's `location`. No v1 route answers this yet |
 
 ## Other answers
 
