@@ -29,16 +29,34 @@ func main() {
 	}
 }
 
+// schemaOf renders a table type. T? may be absent or null, so it is nullable.
 func schemaOf(typ string) string {
-	switch strings.TrimSuffix(typ, "?") {
-	case "email":
-		return "{type: string, format: email}"
-	case "uuid":
-		return "{type: string, format: uuid}"
+	base := strings.TrimSuffix(typ, "?")
+	nullable := base != typ
+	var format string
+	switch base {
+	case "email", "uuid":
+		format = ", format: " + base
+		base = "string"
 	case "string", "number", "boolean", "object", "array":
-		return "{type: " + strings.TrimSuffix(typ, "?") + "}"
+	default:
+		return "{}"
 	}
-	return "{}"
+	if nullable {
+		return `{type: [` + base + `, "null"]` + format + "}"
+	}
+	return "{type: " + base + format + "}"
+}
+
+// pathParamsOf lists the {name} segments of a path in order.
+func pathParamsOf(path string) []string {
+	var names []string
+	for _, seg := range strings.Split(path, "/") {
+		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
+			names = append(names, seg[1:len(seg)-1])
+		}
+	}
+	return names
 }
 
 func sortedKeys[V any](m map[string]V) []string {
@@ -61,6 +79,9 @@ func Generate(t *routes.Table) []byte {
 	w("  title: Cauthy auth-bff protocol")
 	w("  version: '%d'", t.Version)
 	w("  description: The /api/auth/* routes a backend SDK serves and a client SDK consumes. Relative to the prefix %s.", t.Prefix)
+	w("  license: {name: MIT}")
+	w("servers:")
+	w("  - url: %s", t.Prefix)
 	w("paths:")
 	byPath := map[string][]*routes.Route{}
 	var order []string
@@ -94,8 +115,12 @@ func Generate(t *routes.Table) []byte {
 			if len(r.Clears) > 0 {
 				w("      x-cauthy-clears-cookies: [%s]", strings.Join(r.Clears, ", "))
 			}
-			if len(r.Query) > 0 {
+			pathParams := pathParamsOf(r.Path)
+			if len(pathParams) > 0 || len(r.Query) > 0 {
 				w("      parameters:")
+				for _, name := range pathParams {
+					w("        - {name: %s, in: path, required: true, schema: {type: string}}", name)
+				}
 				for _, k := range sortedKeys(r.Query) {
 					f := r.Query[k]
 					req := ""
@@ -133,6 +158,7 @@ func Generate(t *routes.Table) []byte {
 			case r.Success.Redirect:
 				w("        '302':")
 				w("          description: Redirect")
+				w("          headers: {Location: {schema: {type: string}}}")
 			case r.Stream:
 				w("        '%d':", r.Success.Status)
 				w("          description: Server-sent events")
@@ -163,6 +189,10 @@ func Generate(t *routes.Table) []byte {
 				}
 			}
 			w("        default:")
+			if r.Failures == "redirect" {
+				w("          description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (%s)", strings.Join(append([]string{"bad_request"}, r.Errors...), ", "))
+				continue
+			}
 			w("          description: Error (%s)", strings.Join(append([]string{"bad_request"}, r.Errors...), ", "))
 			if r.Text {
 				w("          content:")

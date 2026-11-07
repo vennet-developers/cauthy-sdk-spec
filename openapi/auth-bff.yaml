@@ -4,6 +4,9 @@ info:
   title: Cauthy auth-bff protocol
   version: '1'
   description: The /api/auth/* routes a backend SDK serves and a client SDK consumes. Relative to the prefix /api/auth.
+  license: {name: MIT}
+servers:
+  - url: /api/auth
 paths:
   /login:
     get:
@@ -20,6 +23,7 @@ paths:
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
           description: Error (bad_request)
           content:
@@ -41,6 +45,7 @@ paths:
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
           description: Error (bad_request)
           content:
@@ -56,6 +61,7 @@ paths:
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
           description: Error (bad_request)
           content:
@@ -71,6 +77,7 @@ paths:
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
           description: Error (bad_request)
           content:
@@ -90,6 +97,7 @@ paths:
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
           description: Error (bad_request)
           content:
@@ -107,6 +115,7 @@ paths:
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
           description: Error (bad_request)
           content:
@@ -130,7 +139,7 @@ paths:
                 type: object
                 required: [status]
                 properties:
-                  session: {type: object}
+                  session: {type: [object, "null"]}
                   status: {type: string}
         default:
           description: Error (bad_request)
@@ -227,16 +236,16 @@ paths:
                 type: object
                 required: [magicLink, passkey, passkeyHere, passkeyOnCauthy, passwordSignIn, providers, signUp, sso]
                 properties:
-                  captchaSiteKey: {type: string}
-                  legal: {type: object}
+                  captchaSiteKey: {type: [string, "null"]}
+                  legal: {type: [object, "null"]}
                   magicLink: {type: boolean}
-                  organization: {type: object}
+                  organization: {type: [object, "null"]}
                   passkey: {type: boolean}
                   passkeyHere: {type: boolean}
                   passkeyOnCauthy: {type: boolean}
-                  password: {type: object}
+                  password: {type: [object, "null"]}
                   passwordSignIn: {type: boolean}
-                  persistentSessions: {type: boolean}
+                  persistentSessions: {type: [boolean, "null"]}
                   providers: {type: array}
                   signUp: {type: boolean}
                   sso: {type: boolean}
@@ -288,8 +297,8 @@ paths:
                 type: object
                 required: [status]
                 properties:
-                  method: {type: string}
-                  session: {type: object}
+                  method: {type: [string, "null"]}
+                  session: {type: [object, "null"]}
                   status: {type: string}
         default:
           description: Error (bad_request)
@@ -352,9 +361,9 @@ paths:
                 type: object
                 required: [status, totp]
                 properties:
-                  email: {type: object}
-                  phone: {type: object}
-                  push: {type: object}
+                  email: {type: [object, "null"]}
+                  phone: {type: [object, "null"]}
+                  push: {type: [object, "null"]}
                   status: {type: string}
                   totp: {type: boolean}
         default:
@@ -530,8 +539,8 @@ paths:
                 type: object
                 required: [status]
                 properties:
-                  email: {type: string}
-                  session: {type: object}
+                  email: {type: [string, "null"]}
+                  session: {type: [object, "null"]}
                   status: {type: string}
         default:
           description: Error (bad_request, weak_password)
@@ -627,7 +636,7 @@ paths:
                 type: object
                 required: [status]
                 properties:
-                  session: {type: object}
+                  session: {type: [object, "null"]}
                   status: {type: string}
         default:
           description: Error (bad_request, invalid_token)
@@ -686,8 +695,8 @@ paths:
                 type: object
                 required: [status]
                 properties:
-                  method: {type: string}
-                  session: {type: object}
+                  method: {type: [string, "null"]}
+                  session: {type: [object, "null"]}
                   status: {type: string}
         default:
           description: Error (bad_request, invalid_token, weak_password)
@@ -971,17 +980,15 @@ paths:
       x-cauthy-failures: redirect
       x-cauthy-sets-cookies: [step]
       parameters:
+        - {name: provider, in: path, required: true, schema: {type: string}}
         - {name: remember, in: query, schema: {type: boolean}}
         - {name: return_to, in: query, schema: {type: string}}
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
-          description: Error (bad_request)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+          description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
   '/callback/{provider}':
     get:
       operationId: sign-in.social_callback
@@ -992,18 +999,16 @@ paths:
       x-cauthy-sets-cookies: [session]
       x-cauthy-clears-cookies: [step]
       parameters:
+        - {name: provider, in: path, required: true, schema: {type: string}}
         - {name: code, in: query, schema: {type: string}}
         - {name: error, in: query, schema: {type: string}}
         - {name: state, in: query, schema: {type: string}}
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
-          description: Error (bad_request)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+          description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
   /sign-in/sso:
     get:
       operationId: sign-in.sso
@@ -1020,12 +1025,9 @@ paths:
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
-          description: Error (bad_request)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+          description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
   /sso/callback:
     get:
       operationId: sign-in.sso_callback
@@ -1041,12 +1043,9 @@ paths:
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
-          description: Error (bad_request)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+          description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
   /sign-in/sso/discover:
     post:
       operationId: sign-in.sso_discover
@@ -1071,7 +1070,7 @@ paths:
                 type: object
                 required: [status]
                 properties:
-                  connection: {type: object}
+                  connection: {type: [object, "null"]}
                   status: {type: string}
         default:
           description: Error (bad_request)
@@ -1268,7 +1267,7 @@ paths:
                 type: object
                 required: [phoneChannels, totp]
                 properties:
-                  phone: {type: object}
+                  phone: {type: [object, "null"]}
                   phoneChannels: {type: array}
                   totp: {type: boolean}
         default:
@@ -1531,16 +1530,14 @@ paths:
       x-cauthy-failures: redirect
       x-cauthy-sets-cookies: [step]
       parameters:
+        - {name: provider, in: path, required: true, schema: {type: string}}
         - {name: return_to, in: query, schema: {type: string}}
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
-          description: Error (bad_request)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+          description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
   /me/identities/unlink:
     post:
       operationId: me.identities_unlink
@@ -1794,16 +1791,14 @@ paths:
       x-cauthy-failures: redirect
       x-cauthy-sets-cookies: [step]
       parameters:
+        - {name: provider, in: path, required: true, schema: {type: string}}
         - {name: return_to, in: query, schema: {type: string}}
       responses:
         '302':
           description: Redirect
+          headers: {Location: {schema: {type: string}}}
         default:
-          description: Error (bad_request)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+          description: Failures are not errors in JSON; errors are delivered by redirect with ?auth_error=<code> (bad_request)
   /me/organizations:
     get:
       operationId: organizations.list
@@ -1906,7 +1901,7 @@ paths:
                 required: [allowed, status]
                 properties:
                   allowed: {type: boolean}
-                  reason: {type: string}
+                  reason: {type: [string, "null"]}
                   status: {type: string}
         default:
           description: Error (bad_request, invalid_organization)

@@ -20,7 +20,7 @@ routes:
       success: { status: 200, fields: { status: string, session: "object?" } }, errors: [invalid_email] }
   - { id: hosted.login, method: GET, path: /login, group: hosted, level: basic, needs: [], query: { return_to: {type: string} }, success: { redirect: true }, failures: redirect }
   - { id: other.events, method: GET, path: /events, group: other, level: basic, needs: [], success: { status: 200 }, stream: true }
-  - { id: other.text, method: GET, path: "/p/{provider}", group: other, level: basic, needs: [], success: { redirect: true }, text: true }
+  - { id: other.text, method: GET, path: "/p/{provider}", group: other, level: basic, needs: [], query: { x: {type: string} }, success: { redirect: true }, text: true }
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,8 @@ routes:
 		"              required: [email]",
 		"                email: {type: string, format: email}",
 		"                required: [status]",
-		"                  session: {type: object}",
+		"                  session: {type: [object, \"null\"]}",
+		"                  status: {type: string}",
 		"                $ref: '#/components/schemas/Error'",
 		"/login:",
 		"    get:",
@@ -45,6 +46,11 @@ routes:
 		"text/event-stream",
 		"'/p/{provider}':",
 		"text/plain",
+		"        - {name: provider, in: path, required: true, schema: {type: string}}",
+		"servers:\n  - url: /api/auth",
+		"  license: {name: MIT}",
+		"          headers: {Location: {schema: {type: string}}}",
+		"errors are delivered by redirect with ?auth_error=<code>",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
@@ -96,7 +102,32 @@ func TestGeneratedFileMatchesTheTable(t *testing.T) {
 			ops++
 		}
 	}
-	if ops != 75 {
-		t.Fatalf("want 75 operationIds, got %d", ops)
+	if ops != len(table.Routes) {
+		t.Fatalf("want %d operationIds, got %d", len(table.Routes), ops)
+	}
+}
+
+func TestNullableTypes(t *testing.T) {
+	for typ, want := range map[string]string{
+		"string?": `{type: [string, "null"]}`,
+		"email?":  `{type: [string, "null"], format: email}`,
+		"uuid?":   `{type: [string, "null"], format: uuid}`,
+		"email":   `{type: string, format: email}`,
+	} {
+		if got := schemaOf(typ); got != want {
+			t.Errorf("schemaOf(%s) = %s, want %s", typ, got, want)
+		}
+	}
+}
+
+func TestRedirectFailuresHaveNoJSONError(t *testing.T) {
+	table, _ := routes.Parse([]byte(`version: 1
+prefix: /api/auth
+routes:
+  - { id: a.b, method: GET, path: /x, group: other, level: basic, success: { redirect: true }, failures: redirect }
+`))
+	out := string(Generate(table))
+	if strings.Contains(out, "Error'") && strings.Contains(out, "$ref: '#/components/schemas/Error'") {
+		t.Errorf("redirect-failure route must not reference the JSON Error:\n%s", out)
 	}
 }
