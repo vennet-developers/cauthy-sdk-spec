@@ -79,7 +79,7 @@ func Generate(t *routes.Table) []byte {
 	w("  title: Cauthy auth-bff protocol")
 	w("  version: '%d'", t.Version)
 	w("  description: The /api/auth/* routes a backend SDK serves and a client SDK consumes. Relative to the prefix %s.", t.Prefix)
-	w("  license: {name: MIT}")
+	w("  license: {name: MIT, identifier: MIT}")
 	w("servers:")
 	w("  - url: %s", t.Prefix)
 	w("paths:")

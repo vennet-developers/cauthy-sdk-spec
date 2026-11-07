@@ -48,7 +48,7 @@ routes:
 		"text/plain",
 		"        - {name: provider, in: path, required: true, schema: {type: string}}",
 		"servers:\n  - url: /api/auth",
-		"  license: {name: MIT}",
+		"  license: {name: MIT, identifier: MIT}",
 		"          headers: {Location: {schema: {type: string}}}",
 		"errors are delivered by redirect with ?auth_error=<code>",
 	} {
