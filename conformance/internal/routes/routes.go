@@ -2,8 +2,10 @@
 package routes
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -67,7 +69,9 @@ func Load(path string) (*Table, error) {
 
 func Parse(raw []byte) (*Table, error) {
 	var t Table
-	if err := yaml.Unmarshal(raw, &t); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	dec.KnownFields(true)
+	if err := dec.Decode(&t); err != nil {
 		return nil, fmt.Errorf("routes.yaml: %w", err)
 	}
 	t.byID = map[string]*Route{}
@@ -82,7 +86,48 @@ func Parse(raw []byte) (*Table, error) {
 		case r.Failures != "" && r.Failures != "redirect":
 			return nil, fmt.Errorf("routes.yaml: route %s: failures %q (only redirect)", r.ID, r.Failures)
 		}
+		if err := validate(r); err != nil {
+			return nil, fmt.Errorf("routes.yaml: route %s: %w", r.ID, err)
+		}
 		t.byID[r.ID] = r
 	}
 	return &t, nil
+}
+
+var (
+	validTypes = map[string]bool{"string": true, "email": true, "uuid": true, "number": true, "boolean": true, "object": true, "array": true}
+	validNeeds = map[string]bool{"tenant": true, "session": true, "step": true, "crosssite": true, "json": true}
+)
+
+func validate(r *Route) error {
+	if !strings.HasPrefix(r.Path, "/") {
+		return fmt.Errorf("path %q must start with /", r.Path)
+	}
+	for _, n := range r.NeedsList {
+		if !validNeeds[n] {
+			return fmt.Errorf("unknown need %q", n)
+		}
+	}
+	for _, params := range []map[string]Field{r.Query, r.Body} {
+		for name, f := range params {
+			if !validTypes[f.Type] {
+				return fmt.Errorf("parameter %s: unknown type %q", name, f.Type)
+			}
+		}
+	}
+	for name, typ := range r.Success.Fields {
+		if !validTypes[strings.TrimSuffix(typ, "?")] {
+			return fmt.Errorf("success field %s: unknown type %q", name, typ)
+		}
+	}
+	if r.Success.Redirect == (r.Success.Status > 0) {
+		return fmt.Errorf("success must be exactly one of redirect: true or a status")
+	}
+	if len(r.Body) > 0 && !r.Needs("json") {
+		return fmt.Errorf("body without json in needs")
+	}
+	if r.Method == "GET" && r.Needs("json") {
+		return fmt.Errorf("json on a GET route")
+	}
+	return nil
 }
