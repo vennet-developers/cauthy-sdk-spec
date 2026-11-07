@@ -142,14 +142,22 @@ func (rep *Report) Passed() bool {
 	return true
 }
 
-// Complete is false when a basic-level check was skipped: the run proved less
-// than it should, even if nothing failed.
-func (rep *Report) Complete() bool { return rep.skippedBasic() == 0 }
+// Complete is false when a check at or below the run's level was skipped: the
+// run proved less than it should, even if nothing failed.
+func (rep *Report) Complete() bool { return rep.skipped() == 0 }
 
-func (rep *Report) skippedBasic() int {
+func levelOf(name string) Level {
+	if name == Strict.String() {
+		return Strict
+	}
+	return Basic
+}
+
+// skipped counts the skipped checks that the run's level required.
+func (rep *Report) skipped() int {
 	n := 0
 	for _, g := range rep.Results {
-		if g.Status == StatusSkip && g.Level == Basic.String() {
+		if g.Status == StatusSkip && levelOf(g.Level) <= levelOf(rep.Level) {
 			n++
 		}
 	}

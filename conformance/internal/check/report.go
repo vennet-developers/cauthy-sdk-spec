@@ -17,8 +17,12 @@ func (rep *Report) Text() string {
 	}
 	fmt.Fprintf(&b, "\n%d passed, %d failed, %d skipped, %d advisory — protocol %d, level %s\n",
 		counts[StatusPass], counts[StatusFail], counts[StatusSkip], counts[StatusAdvisory], rep.Protocol, rep.Level)
-	if n := rep.skippedBasic(); n > 0 {
-		fmt.Fprintf(&b, "INCOMPLETE: %d basic checks skipped\n", n)
+	if n := rep.skipped(); n > 0 {
+		noun := "checks"
+		if n == 1 {
+			noun = "check"
+		}
+		fmt.Fprintf(&b, "INCOMPLETE: %d %s skipped\n", n, noun)
 	}
 	return b.String()
 }

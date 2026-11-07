@@ -96,8 +96,22 @@ func TestPassedAndCompleteWithSkips(t *testing.T) {
 	if !rep.Passed() || rep.Complete() {
 		t.Fatal("a skipped basic check passes but leaves the run incomplete")
 	}
-	if !strings.Contains(rep.Text(), "INCOMPLETE: 1 basic checks skipped") {
+	if !strings.Contains(rep.Text(), "INCOMPLETE: 1 check skipped") {
 		t.Fatalf("text lacks INCOMPLETE:\n%s", rep.Text())
+	}
+}
+
+func TestStrictRunIsIncompleteWhenAStrictCheckIsSkipped(t *testing.T) {
+	reg := &Registry{}
+	reg.Add(Check{ID: "a.ok", Level: Basic, Run: func(*Ctx) Result { return Pass("") }})
+	reg.Add(Check{ID: "a.skipped_strict", Level: Strict, Run: func(*Ctx) Result { return Skip("no") }})
+	reg.Add(Check{ID: "a.skipped_strict2", Level: Strict, Run: func(*Ctx) Result { return Skip("no") }})
+	rep := reg.Run(&Ctx{}, Strict)
+	if rep.Complete() {
+		t.Fatal("at level strict a skipped strict check leaves the run incomplete")
+	}
+	if !strings.Contains(rep.Text(), "INCOMPLETE: 2 checks skipped") {
+		t.Fatalf("text lacks plural INCOMPLETE:\n%s", rep.Text())
 	}
 }
 
