@@ -69,6 +69,7 @@ func TestRunUsageErrors(t *testing.T) {
 		"switches without cauthy": {runner.Options{Target: "http://x", Origin: "http://x", Level: runner.Switches}, "--cauthy"},
 		"cauthy without tenant":   {runner.Options{Target: "http://x", Origin: "http://x", Cauthy: "http://c", AdminToken: "t"}, "--tenant"},
 		"cauthy without token":    {runner.Options{Target: "http://x", Origin: "http://x", Cauthy: "http://c", Tenant: "acme"}, "admin token"},
+		"admin token over http":   {runner.Options{Target: "http://x", Origin: "http://x", Cauthy: "http://cauthy.example.com", Tenant: "acme", AdminToken: "t"}, "https"},
 	} {
 		_, err := runner.Run(context.Background(), tc.o)
 		if !errors.Is(err, runner.ErrUsage) || !strings.Contains(err.Error(), tc.want) {

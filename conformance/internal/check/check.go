@@ -4,6 +4,7 @@
 package check
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 )
@@ -120,9 +121,15 @@ type Report struct {
 
 // Run executes every check. A failing check above the requested level is
 // reported as advisory and does not fail the run.
-func (r *Registry) Run(ctx *Ctx, level Level) *Report {
-	defer ctx.Cleanup()
-	rep := &Report{Level: level.String(), Results: []Graded{}}
+func (r *Registry) Run(ctx *Ctx, level Level) (rep *Report) {
+	// A tenant the run could not put back fails the run: someone has to.
+	defer func() {
+		if errs := ctx.Cleanup(); len(errs) > 0 {
+			rep.Results = append(rep.Results, Graded{ID: "cleanup", Group: "cleanup", Level: level.String(), Status: StatusFail,
+				Detail: fmt.Sprintf("the tenant was left changed; put it back by hand: %v", errors.Join(errs...))})
+		}
+	}()
+	rep = &Report{Level: level.String(), Results: []Graded{}}
 	if ctx.Table != nil {
 		rep.Protocol = ctx.Table.Version
 	}

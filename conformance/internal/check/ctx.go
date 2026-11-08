@@ -71,8 +71,8 @@ func (c *Ctx) Methods() (*client.Response, error) {
 // Cleanup signs out every session the run opened, best effort, so a run leaves
 // none open, and puts back any tenant setting a switch check left changed (a
 // switch check puts back its own; this is for a run stopped half way). It is
-// safe to call twice.
-func (c *Ctx) Cleanup() {
+// safe to call twice. It answers what it could not put back.
+func (c *Ctx) Cleanup() []error {
 	for slot, e := range c.signIns {
 		if e.err == nil && e.res != nil && e.res.Status == 200 {
 			e.browser.PostJSON("/sign-out", map[string]any{}, map[string]string{"X-Cauthy-Request": "1"})
@@ -80,6 +80,7 @@ func (c *Ctx) Cleanup() {
 		delete(c.signIns, slot)
 	}
 	if c.Admin != nil {
-		c.Admin.Restore()
+		return c.Admin.Restore()
 	}
+	return nil
 }

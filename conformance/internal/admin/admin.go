@@ -36,6 +36,10 @@ type Client struct {
 	made           []string       // addresses of accounts the checks signed up
 }
 
+// restoreTimeout bounds putting the tenant back: three tries of each call,
+// with the waits a rate limit asks for.
+const restoreTimeout = 5 * time.Minute
+
 // New is an admin of tenant on the Cauthy at base. Every call is bound to ctx.
 func New(ctx context.Context, base, tenant, token, clientID string) *Client {
 	return &Client{Base: strings.TrimSuffix(base, "/"), Tenant: tenant, ClientID: clientID, token: token, ctx: ctx,
@@ -55,6 +59,11 @@ func (c *Client) GoString() string { return c.String() }
 // again after its Retry-After, twice at most, so a run that trips Cauthy's
 // rate limit still puts the tenant back.
 func (c *Client) call(method, path string, body any) (map[string]any, error) {
+	return c.callCtx(c.ctx, method, path, body)
+}
+
+// callCtx is call bound to ctx instead of the run's.
+func (c *Client) callCtx(ctx context.Context, method, path string, body any) (map[string]any, error) {
 	var raw []byte
 	if body != nil {
 		var err error
@@ -63,12 +72,12 @@ func (c *Client) call(method, path string, body any) (map[string]any, error) {
 		}
 	}
 	for attempt := 0; ; attempt++ {
-		out, retryAfter, err := c.once(method, path, raw)
+		out, retryAfter, err := c.once(ctx, method, path, raw)
 		if retryAfter < 0 || attempt == 2 {
 			return out, err
 		}
 		select {
-		case <-c.ctx.Done():
+		case <-ctx.Done():
 			return nil, err
 		case <-time.After(retryAfter):
 		}
@@ -77,12 +86,12 @@ func (c *Client) call(method, path string, body any) (map[string]any, error) {
 
 // once sends the request once. retryAfter is how long to wait before trying
 // again when Cauthy answered 429, and -1 otherwise.
-func (c *Client) once(method, path string, raw []byte) (out map[string]any, retryAfter time.Duration, err error) {
+func (c *Client) once(ctx context.Context, method, path string, raw []byte) (out map[string]any, retryAfter time.Duration, err error) {
 	var r io.Reader
 	if raw != nil {
 		r = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(c.ctx, method, c.Base+path, r)
+	req, err := http.NewRequestWithContext(ctx, method, c.Base+path, r)
 	if err != nil {
 		return nil, -1, err
 	}
@@ -199,16 +208,20 @@ func (c *Client) Made(email string) {
 func (c *Client) Restore() []error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// Putting the tenant back matters most when the run was stopped, so it
+	// does not share the run's cancellation; it has its own time limit.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.ctx), restoreTimeout)
+	defer cancel()
 	var errs []error
 	if len(c.original) > 0 {
-		if _, err := c.call(http.MethodPut, "/v1/settings/auth", c.original); err != nil {
+		if _, err := c.callCtx(ctx, http.MethodPut, "/v1/settings/auth", c.original); err != nil {
 			errs = append(errs, err)
 		} else {
 			c.original = map[string]any{}
 		}
 	}
 	if c.clientOriginal != nil {
-		if _, err := c.call(http.MethodPatch, "/v1/oauth/clients/"+url.PathEscape(c.ClientID), map[string]any{"allow_persistent_sessions": *c.clientOriginal}); err != nil {
+		if _, err := c.callCtx(ctx, http.MethodPatch, "/v1/oauth/clients/"+url.PathEscape(c.ClientID), map[string]any{"allow_persistent_sessions": *c.clientOriginal}); err != nil {
 			errs = append(errs, err)
 		} else {
 			c.clientOriginal = nil
@@ -216,7 +229,7 @@ func (c *Client) Restore() []error {
 	}
 	var left []string
 	for _, email := range c.made {
-		if err := c.deleteAccount(email); err != nil {
+		if err := c.deleteAccount(ctx, email); err != nil {
 			errs = append(errs, err)
 			left = append(left, email)
 		}
@@ -226,8 +239,8 @@ func (c *Client) Restore() []error {
 }
 
 // deleteAccount deletes the account with exactly this address, if there is one.
-func (c *Client) deleteAccount(email string) error {
-	list, err := c.call(http.MethodGet, "/v1/users?"+url.Values{"q": {email}}.Encode(), nil)
+func (c *Client) deleteAccount(ctx context.Context, email string) error {
+	list, err := c.callCtx(ctx, http.MethodGet, "/v1/users?"+url.Values{"q": {email}}.Encode(), nil)
 	if err != nil {
 		return err
 	}
@@ -238,7 +251,7 @@ func (c *Client) deleteAccount(email string) error {
 			continue
 		}
 		id, _ := m["id"].(string)
-		if _, err := c.call(http.MethodDelete, "/v1/users/"+url.PathEscape(id), nil); err != nil {
+		if _, err := c.callCtx(ctx, http.MethodDelete, "/v1/users/"+url.PathEscape(id), nil); err != nil {
 			return err
 		}
 	}

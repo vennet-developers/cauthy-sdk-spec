@@ -131,3 +131,21 @@ func TestPollingBacksOff(t *testing.T) {
 		}
 	}
 }
+
+// A switch check that panics still puts the tenant back before the next one.
+func TestAPanickingSwitchStillPutsTheTenantBack(t *testing.T) {
+	ctx, srv := switchCtx(t, fake.Knobs{})
+	run := restoring(func(c *check.Ctx) check.Result {
+		if err := c.Admin.Set(map[string]any{"allow_password": false, "allow_magic_link": true}); err != nil {
+			t.Fatal(err)
+		}
+		panic("a bug in the check")
+	})
+	func() {
+		defer func() { _ = recover() }()
+		run(ctx)
+	}()
+	if srv.Setting("allow_password") != true || srv.Setting("allow_magic_link") != false {
+		t.Fatalf("not put back: %v %v", srv.Setting("allow_password"), srv.Setting("allow_magic_link"))
+	}
+}

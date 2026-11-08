@@ -40,15 +40,18 @@ func RegisterSwitches(reg *check.Registry) {
 // restoring skips a switch check with no Cauthy, and puts the tenant back
 // after it runs; a tenant it cannot put back fails the check.
 func restoring(run func(*check.Ctx) check.Result) func(*check.Ctx) check.Result {
-	return func(c *check.Ctx) check.Result {
+	return func(c *check.Ctx) (res check.Result) {
 		if c.Admin == nil {
 			return check.Skip("needs --cauthy and an admin token")
 		}
-		res := run(c)
-		if errs := c.Admin.Restore(); len(errs) > 0 {
-			return check.Fail(fmt.Sprintf("%s; and putting the tenant back failed: %v", res.Detail, errs))
-		}
-		return res
+		// Deferred, so a check that panics still leaves the tenant as found
+		// for the checks after it.
+		defer func() {
+			if errs := c.Admin.Restore(); len(errs) > 0 && res.Status != "" {
+				res = check.Fail(fmt.Sprintf("%s; and putting the tenant back failed: %v", res.Detail, errs))
+			}
+		}()
+		return run(c)
 	}
 }
 

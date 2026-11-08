@@ -137,3 +137,23 @@ func TestARateLimitThatStaysIsAnError(t *testing.T) {
 		t.Fatalf("%v after %d calls", err, n.Load())
 	}
 }
+
+// A run stopped half way (Ctrl-C, a deadline) still puts the tenant back:
+// Restore does not share the run's cancellation.
+func TestRestoreWorksAfterTheRunIsCanceled(t *testing.T) {
+	srv := fake.New(fake.Knobs{})
+	t.Cleanup(srv.Close)
+	base := srv.StartCauthy("s3cret-admin")
+	ctx, cancel := context.WithCancel(context.Background())
+	a := admin.New(ctx, base, fake.Tenant, "s3cret-admin", fake.ClientID)
+	if err := a.Set(map[string]any{"allow_password": false, "allow_magic_link": true}); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if errs := a.Restore(); len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	if srv.Setting("allow_password") != true || srv.Setting("allow_magic_link") != false {
+		t.Fatalf("not restored: %v %v", srv.Setting("allow_password"), srv.Setting("allow_magic_link"))
+	}
+}

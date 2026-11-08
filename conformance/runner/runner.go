@@ -7,6 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/admin"
@@ -134,6 +137,9 @@ func Run(ctx context.Context, o Options) (Outcome, error) {
 	if o.Cauthy != "" && o.AdminToken == "" {
 		return Outcome{}, usagef("--cauthy needs an admin token (--admin-token-env names the variable that holds it)")
 	}
+	if o.Cauthy != "" && !safeForToken(o.Cauthy) {
+		return Outcome{}, usagef("--cauthy carries an admin token: it must be https, or http on this machine (localhost)")
+	}
 	var table *routes.Table
 	var err error
 	if o.Table != nil {
@@ -158,4 +164,24 @@ func Run(ctx context.Context, o Options) (Outcome, error) {
 		return out, fmt.Errorf("the run stopped: %w", err)
 	}
 	return out, nil
+}
+
+// safeForToken is true for an https address, or an http one on this machine.
+func safeForToken(addr string) bool {
+	u, err := url.Parse(addr)
+	if err != nil {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		h := u.Hostname()
+		if h == "localhost" || strings.HasSuffix(h, ".localhost") {
+			return true
+		}
+		ip := net.ParseIP(h)
+		return ip != nil && ip.IsLoopback()
+	}
+	return false
 }

@@ -219,6 +219,9 @@ func (s *Server) StartCauthy(token string) string {
 	return s.cauthy.URL
 }
 
+// CloseCauthy stops the fake Cauthy, as a Cauthy gone away mid-run.
+func (s *Server) CloseCauthy() { s.cauthy.Close() }
+
 func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
 	refuse := func(status int, code string) {
 		w.Header().Set("Content-Type", "application/json")
