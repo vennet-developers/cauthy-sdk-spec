@@ -3,7 +3,10 @@ package admin_test
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/admin"
@@ -96,5 +99,41 @@ func TestCauthyKeepsOneWayIn(t *testing.T) {
 	err := a.Set(map[string]any{"allow_password": false})
 	if err == nil || !strings.Contains(err.Error(), "409 last_method") {
 		t.Fatalf("want 409 last_method, got %v", err)
+	}
+}
+
+// Cauthy's rate limit answers 429 with Retry-After: the client waits and
+// tries again, so a tenant is still put back when a run trips the limit.
+func TestARateLimitedCallWaitsAndTriesAgain(t *testing.T) {
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if n.Add(1) == 1 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`{"errors":[{"code":"rate_limited"}]}`))
+			return
+		}
+		w.Write([]byte(`{"data":{"allow_signup":true}}`))
+	}))
+	defer srv.Close()
+	a := admin.New(context.Background(), srv.URL, "acme", "t", "")
+	got, err := a.Settings()
+	if err != nil || got["allow_signup"] != true || n.Load() != 2 {
+		t.Fatalf("%v %v after %d calls", got, err, n.Load())
+	}
+}
+
+func TestARateLimitThatStaysIsAnError(t *testing.T) {
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n.Add(1)
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"errors":[{"code":"rate_limited"}]}`))
+	}))
+	defer srv.Close()
+	a := admin.New(context.Background(), srv.URL, "acme", "t", "")
+	if _, err := a.Settings(); err == nil || !strings.Contains(err.Error(), "429 rate_limited") || n.Load() != 3 {
+		t.Fatalf("%v after %d calls", err, n.Load())
 	}
 }

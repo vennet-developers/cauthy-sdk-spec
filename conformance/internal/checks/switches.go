@@ -59,10 +59,21 @@ func wait(c *check.Ctx) time.Duration {
 	return 10 * time.Second
 }
 
+// nextPoll is the wait before the next read of /methods: 200 ms, doubling up
+// to 2 s, so a backend that reads Cauthy on every /methods is not polled into
+// Cauthy's rate limit.
+func nextPoll(d time.Duration) time.Duration {
+	if d == 0 {
+		return 200 * time.Millisecond
+	}
+	return min(2*d, 2*time.Second)
+}
+
 // methodsUntil reads /methods on a fresh browser until ok holds or the wait
 // is over, and answers the last answer and whether ok held.
 func methodsUntil(c *check.Ctx, ok func(map[string]any) bool) (map[string]any, bool, error) {
 	deadline := time.Now().Add(wait(c))
+	var pause time.Duration
 	for {
 		res, err := c.Client.Fresh().Get("/methods", nil)
 		if err != nil {
@@ -77,10 +88,11 @@ func methodsUntil(c *check.Ctx, ok func(map[string]any) bool) (map[string]any, b
 		if time.Now().After(deadline) {
 			return res.JSON, false, nil
 		}
+		pause = nextPoll(pause)
 		select {
 		case <-c.Client.Context().Done():
 			return res.JSON, false, c.Client.Context().Err()
-		case <-time.After(200 * time.Millisecond):
+		case <-time.After(pause):
 		}
 	}
 }

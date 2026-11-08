@@ -119,3 +119,15 @@ func TestThePersistentSwitchNeedsTheClient(t *testing.T) {
 		}
 	}
 }
+
+// A backend that reads Cauthy on every /methods must not be polled into
+// Cauthy's rate limit: the wait between reads grows from 200 ms to 2 s.
+func TestPollingBacksOff(t *testing.T) {
+	want := []time.Duration{200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond, 1600 * time.Millisecond, 2 * time.Second, 2 * time.Second}
+	d := time.Duration(0)
+	for i, w := range want {
+		if d = nextPoll(d); d != w {
+			t.Fatalf("poll %d waits %s, want %s", i, d, w)
+		}
+	}
+}

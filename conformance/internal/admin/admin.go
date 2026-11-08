@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,24 +50,45 @@ func (c *Client) String() string {
 // GoString keeps %#v from printing the token too.
 func (c *Client) GoString() string { return c.String() }
 
-// call sends one request and answers the status and the decoded body. An
-// error answer is an error naming the status and Cauthy's code, never a value.
+// call sends one request and answers the decoded body. An error answer is an
+// error naming the status and Cauthy's code, never a value. A 429 is tried
+// again after its Retry-After, twice at most, so a run that trips Cauthy's
+// rate limit still puts the tenant back.
 func (c *Client) call(method, path string, body any) (map[string]any, error) {
-	var r io.Reader
+	var raw []byte
 	if body != nil {
-		raw, err := json.Marshal(body)
-		if err != nil {
+		var err error
+		if raw, err = json.Marshal(body); err != nil {
 			return nil, err
 		}
+	}
+	for attempt := 0; ; attempt++ {
+		out, retryAfter, err := c.once(method, path, raw)
+		if retryAfter < 0 || attempt == 2 {
+			return out, err
+		}
+		select {
+		case <-c.ctx.Done():
+			return nil, err
+		case <-time.After(retryAfter):
+		}
+	}
+}
+
+// once sends the request once. retryAfter is how long to wait before trying
+// again when Cauthy answered 429, and -1 otherwise.
+func (c *Client) once(method, path string, raw []byte) (out map[string]any, retryAfter time.Duration, err error) {
+	var r io.Reader
+	if raw != nil {
 		r = bytes.NewReader(raw)
 	}
 	req, err := http.NewRequestWithContext(c.ctx, method, c.Base+path, r)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("X-Tenant-Key", c.Tenant)
-	if body != nil {
+	if raw != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	res, err := c.http.Do(req)
@@ -75,16 +97,15 @@ func (c *Client) call(method, path string, body any) (map[string]any, error) {
 		if errors.As(err, &ue) {
 			err = ue.Err
 		}
-		return nil, fmt.Errorf("%s %s: %v", method, path, err)
+		return nil, -1, fmt.Errorf("%s %s: %v", method, path, err)
 	}
 	defer res.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if err != nil {
-		return nil, fmt.Errorf("%s %s: %v", method, path, err)
+		return nil, -1, fmt.Errorf("%s %s: %v", method, path, err)
 	}
-	var out map[string]any
-	if len(raw) > 0 {
-		_ = json.Unmarshal(raw, &out)
+	if len(body) > 0 {
+		_ = json.Unmarshal(body, &out)
 	}
 	if res.StatusCode >= 300 {
 		code := ""
@@ -93,9 +114,16 @@ func (c *Client) call(method, path string, body any) (map[string]any, error) {
 				code, _ = e["code"].(string)
 			}
 		}
-		return nil, fmt.Errorf("%s %s answered %d %s", method, path, res.StatusCode, code)
+		retryAfter = -1
+		if res.StatusCode == http.StatusTooManyRequests {
+			retryAfter = time.Minute
+			if secs, err := strconv.Atoi(res.Header.Get("Retry-After")); err == nil && secs >= 0 && secs <= 120 {
+				retryAfter = time.Duration(secs) * time.Second
+			}
+		}
+		return nil, retryAfter, fmt.Errorf("%s %s answered %d %s", method, path, res.StatusCode, code)
 	}
-	return out, nil
+	return out, -1, nil
 }
 
 // Settings answers the tenant's sign-in settings (GET /v1/settings/auth).
