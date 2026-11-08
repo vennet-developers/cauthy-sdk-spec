@@ -1,0 +1,46 @@
+{
+  "name": "@cauthyhq/spec",
+  "version": "0.1.0",
+  "description": "TypeScript types of Cauthy's public API and of the auth-bff protocol, generated from cauthy-sdk-spec.",
+  "license": "Apache-2.0",
+  "author": "Vennet Developers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vennet-developers/cauthy-sdk-spec.git",
+    "directory": "packages/spec"
+  },
+  "homepage": "https://github.com/vennet-developers/cauthy-sdk-spec/tree/main/packages/spec#readme",
+  "bugs": "https://github.com/vennet-developers/cauthy-sdk-spec/issues",
+  "cauthy": {
+    "protocol": 1
+  },
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.d.ts",
+    "cauthy.d.ts",
+    "auth-bff.d.ts",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "generate": "openapi-typescript ../../openapi/cauthy.yaml -o cauthy.d.ts && openapi-typescript ../../openapi/auth-bff.yaml -o auth-bff.d.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepack": "cp ../../LICENSE ../../NOTICE ."
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

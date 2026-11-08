@@ -3,3 +3,6 @@ conformance/bin/
 .DS_Store
 .env*
 coverage.out
+node_modules/
+packages/spec/LICENSE
+packages/spec/NOTICE
