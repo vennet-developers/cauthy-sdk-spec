@@ -17,6 +17,7 @@ func RegisterAll(reg *check.Registry) {
 	RegisterCSRF(reg)
 	RegisterTable(reg)
 	RegisterStrict(reg)
+	RegisterSwitches(reg)
 }
 
 func RegisterProtocol(reg *check.Registry) {
