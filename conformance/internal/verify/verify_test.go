@@ -3,6 +3,7 @@ package verify
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -134,5 +135,48 @@ func TestVerifyReportsEmailVerified(t *testing.T) {
 	id, err = verifier(t, nil).Verify(context.Background(), token(t, nil), now)
 	if err != nil || id.EmailVerified {
 		t.Fatalf("absent must read false: %+v, %v", id, err)
+	}
+}
+
+func TestVerifyRefusesAClientsOwnTokenUnlessTold(t *testing.T) {
+	// A client_credentials token: token_use "client", the client's public id,
+	// no email. Presence of token_use is the mark, whatever its value.
+	for _, use := range []string{"client", "", "person"} {
+		tok := token(t, map[string]any{"token_use": use, "client_id": "acme-billing", "email": nil})
+		if _, err := verifier(t, nil).Verify(context.Background(), tok, now); reasonOf(err) != ClientToken {
+			t.Errorf("token_use %q: want client_token, got %v", use, err)
+		}
+	}
+	tok := token(t, map[string]any{"token_use": "client", "client_id": "acme-billing", "email": nil})
+	id, err := verifier(t, func(c *Config) { c.AllowClientTokens = true }).Verify(context.Background(), tok, now)
+	if err != nil || id.ClientID != "acme-billing" {
+		t.Fatalf("allowed: %+v, %v", id, err)
+	}
+}
+
+func TestVerifySystemTokenWinsOverClientToken(t *testing.T) {
+	tok := token(t, map[string]any{"sys": "acme-crm", "token_use": "client"})
+	if _, err := verifier(t, func(c *Config) { c.AllowClientTokens = true }).Verify(context.Background(), tok, now); reasonOf(err) != SystemToken {
+		t.Fatalf("want system_token, got %v", err)
+	}
+}
+
+func TestVerifyTypesTokenUseAndAzp(t *testing.T) {
+	for _, claims := range []map[string]any{
+		{"token_use": json.RawMessage("null")},
+		{"token_use": 1},
+		{"azp": json.RawMessage("null")},
+		{"azp": []string{"acme-web"}},
+	} {
+		if _, err := verifier(t, nil).Verify(context.Background(), token(t, claims), now); reasonOf(err) != InvalidClaim {
+			t.Errorf("%v: want invalid_claim, got %v", claims, err)
+		}
+	}
+}
+
+func TestVerifyReportsTheAuthorizedParty(t *testing.T) {
+	id, err := verifier(t, nil).Verify(context.Background(), token(t, map[string]any{"azp": "acme-web"}), now)
+	if err != nil || id.AuthorizedParty != "acme-web" || id.ClientID != "" {
+		t.Fatalf("%+v, %v", id, err)
 	}
 }

@@ -25,6 +25,10 @@ type Config struct {
 	Tenant string
 	// AllowAnonymous lets a guest's token through. Off by default.
 	AllowAnonymous bool
+	// AllowClientTokens lets a client's own token (token_use, from a
+	// client_credentials grant) through, for a backend that serves machines.
+	// Off by default.
+	AllowClientTokens bool
 	// Leeway is the clock tolerance: nil means DefaultLeeway, a pointer to
 	// zero means none; at most MaxLeeway. LeewayOf makes the pointer.
 	Leeway *time.Duration

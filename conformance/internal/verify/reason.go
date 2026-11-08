@@ -27,6 +27,7 @@ const (
 	IssuedInFuture    Reason = "issued_in_future"
 	WrongTenant       Reason = "wrong_tenant"
 	SystemToken       Reason = "system_token"
+	ClientToken       Reason = "client_token"
 	AnonymousToken    Reason = "anonymous_token"
 )
 
@@ -34,7 +35,7 @@ const (
 var Reasons = []Reason{
 	TooLarge, Malformed, AlgNotAllowed, UnsupportedHeader, MissingKid, UnknownKid, WeakKey,
 	BadSignature, MissingClaim, InvalidClaim, WrongIssuer, WrongAudience, Expired, NotYetValid,
-	IssuedInFuture, WrongTenant, SystemToken, AnonymousToken,
+	IssuedInFuture, WrongTenant, SystemToken, ClientToken, AnonymousToken,
 }
 
 // Error is a refused token: the reason and a detail for logs. The detail

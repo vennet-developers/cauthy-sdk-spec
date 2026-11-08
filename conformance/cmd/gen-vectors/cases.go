@@ -100,6 +100,10 @@ func Cases(k Keys) []vectors.Case {
 	agent := with(person(), "aud", []string{"https://mcp.example.com"}, "scope", "crm:read", "client_id", "mcp-agent", "auth_time", nil)
 	system := with(person(), "sub", Client, "roles", []string{}, "email", nil, "email_verified", nil, "auth_time", nil, "sys", "acme-crm")
 	guest := with(person(), "email", nil, "email_verified", nil, "anon", true)
+	// client is a client's own token, from a client_credentials grant: sub the
+	// client's internal id, its roles, no email, token_use and its public id.
+	client := with(person(), "sub", Client, "roles", []string{"invoices:read"}, "email", nil, "email_verified", nil, "auth_time", nil,
+		"token_use", "client", "client_id", "acme-billing")
 	attackerJWK := publicOf(k, KidAttacker, KidA, "sig")
 	customDomain := signed(with(person(), "iss", CustomIssuer))
 	// dupPayload is person() with sub written twice, the first one another's.
@@ -128,6 +132,12 @@ func Cases(k Keys) []vectors.Case {
 			c.Config.AllowAnonymous = true
 			return c
 		}(),
+		func() vectors.Case {
+			c := valid("valid/client-token-allowed", "R13", "A client's own token where the backend serves machines (allow_client_tokens)", signed(client))
+			c.Config.AllowClientTokens = true
+			return c
+		}(),
+		valid("valid/azp", "R8", "A person's token issued through a client: azp names it", signed(with(person(), "azp", "acme-web"))),
 		func() vectors.Case {
 			c := valid("valid/second-issuer", "R9", "iss is the workspace's custom domain, listed in issuers beside the configured issuer", customDomain)
 			c.Config.Issuers = []string{CustomIssuer}
@@ -206,6 +216,9 @@ func Cases(k Keys) []vectors.Case {
 		invalid("claims/nbf-exponent", "R8", "nbf written with an exponent (1.76722554e9)", signed(with(person(), "nbf", number("1.76722554e9"))), verify.InvalidClaim),
 		invalid("claims/nbf-decimal-point", "R8", "nbf written with a decimal point (1767225540.0)", signed(with(person(), "nbf", number("1767225540.0"))), verify.InvalidClaim),
 		invalid("claims/email-verified-string", "R8", "email_verified is the string \"true\"", signed(with(person(), "email_verified", "true")), verify.InvalidClaim),
+		invalid("claims/token-use-null", "R8", "token_use is null", signed(with(person(), "token_use", null{})), verify.InvalidClaim),
+		invalid("claims/azp-null", "R8", "azp is null", signed(with(person(), "azp", null{})), verify.InvalidClaim),
+		invalid("claims/azp-array", "R8", "azp is an array", signed(with(person(), "azp", []string{"acme-web"})), verify.InvalidClaim),
 
 		invalid("iss/other", "R9", "Another issuer", signed(with(person(), "iss", "https://attacker.example.com")), verify.WrongIssuer),
 		invalid("iss/trailing-slash", "R9", "The issuer with a trailing slash", signed(with(person(), "iss", Issuer+"/")), verify.WrongIssuer),
@@ -232,6 +245,14 @@ func Cases(k Keys) []vectors.Case {
 		invalid("system/sys-empty", "R13", "sys present and empty", signed(with(person(), "sys", "")), verify.SystemToken),
 		invalid("system/sys-null", "R13", "sys present as null: its presence is what counts", signed(with(person(), "sys", null{})), verify.SystemToken),
 		invalid("system/sys-false", "R13", "sys present as false", signed(with(person(), "sys", false)), verify.SystemToken),
+
+		invalid("client/client-token", "R13", "A client's own token where the backend expects a person", signed(client), verify.ClientToken),
+		invalid("client/token-use-other", "R13", "token_use present with another value: its presence is what counts", signed(with(person(), "token_use", "person")), verify.ClientToken),
+		func() vectors.Case {
+			c := invalid("client/system-and-client", "R13", "sys and token_use both present, with client tokens allowed: refused as a system's", signed(with(client, "sys", "acme-crm")), verify.SystemToken)
+			c.Config.AllowClientTokens = true
+			return c
+		}(),
 
 		invalid("anonymous/guest", "R14", "A guest's token where the backend expects a person", signed(guest), verify.AnonymousToken),
 	}

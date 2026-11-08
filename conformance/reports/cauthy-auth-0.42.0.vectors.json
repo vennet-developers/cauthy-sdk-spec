@@ -1,7 +1,7 @@
 {
   "sdk": "cauthy-auth",
   "version": "0.42.0",
-  "vectors": 96,
+  "vectors": 104,
   "findings": [
     {
       "name": "valid/exp-inside-leeway",
@@ -228,6 +228,30 @@
       "detail": ""
     },
     {
+      "name": "claims/token-use-null",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/azp-null",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "claims/azp-array",
+      "rule": "R8",
+      "expect": "invalid",
+      "reason": "invalid_claim",
+      "got": "valid",
+      "detail": ""
+    },
+    {
       "name": "iss/not-in-list",
       "rule": "R9",
       "expect": "invalid",
@@ -278,6 +302,30 @@
       "got": "valid",
       "detail": "",
       "resolution": "fixed in cauthy-auth 0.43 and in @cauthyhq/node 1.0"
+    },
+    {
+      "name": "client/client-token",
+      "rule": "R13",
+      "expect": "invalid",
+      "reason": "client_token",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "client/token-use-other",
+      "rule": "R13",
+      "expect": "invalid",
+      "reason": "client_token",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "client/system-and-client",
+      "rule": "R13",
+      "expect": "invalid",
+      "reason": "system_token",
+      "got": "valid",
+      "detail": ""
     },
     {
       "name": "anonymous/guest",

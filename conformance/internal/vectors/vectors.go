@@ -16,6 +16,8 @@ type Config struct {
 	Audience       string   `json:"audience"`
 	Tenant         string   `json:"tenant"`
 	AllowAnonymous bool     `json:"allow_anonymous,omitempty"`
+	// AllowClientTokens accepts a client's own token (token_use).
+	AllowClientTokens bool `json:"allow_client_tokens,omitempty"`
 }
 
 // Case is one token and the verdict every verifier must reach.

@@ -23,7 +23,13 @@ type Identity struct {
 	EmailVerified bool
 	Roles         []string
 	Anonymous     bool
-	ExpiresAt     time.Time
+	// AuthorizedParty is azp: the client a person's token was issued
+	// through; empty when the token names none.
+	AuthorizedParty string
+	// ClientID is client_id when it is a string: on a client's own token,
+	// the client's public id; on an AI agent's, the agent's.
+	ClientID  string
+	ExpiresAt time.Time
 }
 
 var b64 = base64.RawURLEncoding.Strict()
@@ -150,9 +156,13 @@ func (v *Verifier) Verify(ctx context.Context, token string, now time.Time) (*Id
 		return nil, refuse(WrongTenant, "tid %q", c.tid)
 	}
 
-	// R13 — a system's own token never stands for a person.
+	// R13 — a system's own token never stands for a person, and a client's
+	// own token only where the backend serves machines.
 	if c.sys {
 		return nil, refuse(SystemToken, "the token carries sys")
+	}
+	if c.tokenUse && !v.cfg.AllowClientTokens {
+		return nil, refuse(ClientToken, "the token carries token_use")
 	}
 
 	// R14 — a guest only where the backend allows guests.
@@ -163,16 +173,18 @@ func (v *Verifier) Verify(ctx context.Context, token string, now time.Time) (*Id
 	sec := int64(c.exp)
 	return &Identity{
 		Subject: c.sub, Tenant: c.tid, Email: c.email, EmailVerified: c.emailVerified, Roles: c.roles, Anonymous: c.anon,
+		AuthorizedParty: c.azp, ClientID: c.clientID,
 		ExpiresAt: time.Unix(sec, int64((c.exp-float64(sec))*1e9)).UTC(),
 	}, nil
 }
 
 type readClaimSet struct {
 	iss, sub, tid, email string
+	azp, clientID        string
 	aud, roles           []string
 	exp, iat             float64
 	nbf                  *float64
-	anon, sys            bool
+	anon, sys, tokenUse  bool
 	emailVerified        bool
 }
 
@@ -251,6 +263,7 @@ func stringList(raw json.RawMessage) ([]string, bool) {
 // readClaims checks the type of every claim the rules name (R8). A claim the
 // rules name may not be null, except roles. Claims the rules do not name are
 // ignored; sys is not read at all, because its presence is what R13 refuses.
+// token_use is typed (a string), but R13 refuses it by presence too.
 func readClaims(m map[string]json.RawMessage) (*readClaimSet, error) {
 	c := &readClaimSet{}
 	bad := func(name string) error { return refuse(InvalidClaim, "%s has the wrong type or format", name) }
@@ -304,6 +317,17 @@ func readClaims(m map[string]json.RawMessage) (*readClaimSet, error) {
 	}
 	if _, present := m["anon"]; present && !into("anon", &c.anon) {
 		return nil, bad("anon")
+	}
+	var use string
+	if _, c.tokenUse = m["token_use"]; c.tokenUse && !into("token_use", &use) {
+		return nil, bad("token_use")
+	}
+	if _, present := m["azp"]; present && !into("azp", &c.azp) {
+		return nil, bad("azp")
+	}
+	// client_id is not a rule's claim: read only when it is a string.
+	if raw, present := m["client_id"]; present {
+		_ = json.Unmarshal(raw, &c.clientID)
 	}
 	_, c.sys = m["sys"]
 	return c, nil

@@ -30,7 +30,7 @@ func TestVectors(t *testing.T) {
 		t.Run(c.Name, func(t *testing.T) {
 			v, err := verify.New(verify.Config{
 				Issuer: c.Config.Issuer, Issuers: c.Config.Issuers, Audience: c.Config.Audience, Tenant: c.Config.Tenant,
-				AllowAnonymous: c.Config.AllowAnonymous,
+				AllowAnonymous: c.Config.AllowAnonymous, AllowClientTokens: c.Config.AllowClientTokens,
 			}, keys)
 			if err != nil {
 				t.Fatal(err)

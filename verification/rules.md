@@ -36,6 +36,7 @@ The keys are published at `<issuer>/.well-known/jwks.json`: every active key as 
 | `tenant` | Required: the workspace id, a lowercase UUID, not the nil UUID. A verifier without a tenant does not start |
 | `leeway` | Clock tolerance. Default 30 seconds when unset; 0 to 60 accepted, and an explicit 0 means none |
 | `allow_anonymous` | Whether a guest's token is accepted. Default `false` |
+| `allow_client_tokens` | Whether a client's own token (`token_use`, from a `client_credentials` grant) is accepted, for a backend that serves machines as well as people. Default `false` |
 
 A configuration that breaks a rule is an error when the verifier is built, before it verifies anything.
 
@@ -52,12 +53,12 @@ The rules run in this order, and a token is refused at the first one it breaks, 
 | R5 | `kid` is a non-empty string, and the issuer's set has a usable key with that `kid`. A key is usable when `kty` is `RSA`, `use` is `sig` or absent, and `alg` is `RS256` or absent; a usable key under 2048 bits is refused on its own reason | `missing_kid`, `unknown_kid`, `weak_key` |
 | R6 | The RSASSA-PKCS1-v1_5 SHA-256 signature verifies over the first two segments exactly as received | `bad_signature` |
 | R7 | The payload is a JSON object (else `malformed`) and has `iss`, `sub`, `aud`, `exp`, `iat` and `tid` | `missing_claim` |
-| R8 | `iss` is a string; `sub` and `tid` are lowercase UUIDs; `aud` is a string or a non-empty array in which every element is a string; `exp`, `iat` and `nbf` are JSON integers within ±2^53, written as integers (not strings, not fractions, and no exponent or decimal point: `1.8e9` and `1800000000.0` are refused); `roles` is an array in which every element is a string, or `null`; `email` is a string; `email_verified` and `anon` are booleans. None of them is `null` except `roles`, and no array element is `null`. Claims not named here are ignored, `sys` among them (R13 only looks for it) | `invalid_claim` |
+| R8 | `iss` is a string; `sub` and `tid` are lowercase UUIDs; `aud` is a string or a non-empty array in which every element is a string; `exp`, `iat` and `nbf` are JSON integers within ±2^53, written as integers (not strings, not fractions, and no exponent or decimal point: `1.8e9` and `1800000000.0` are refused); `roles` is an array in which every element is a string, or `null`; `email` is a string; `email_verified` and `anon` are booleans; `token_use` and `azp` are strings. None of them is `null` except `roles`, and no array element is `null`. Claims not named here are ignored, `sys` among them (R13 only looks for it) | `invalid_claim` |
 | R9 | `iss` equals the configured `issuer` or one of the configured `issuers`, byte for byte: no trimming, no case folding | `wrong_issuer` |
 | R10 | `aud` equals the configured audience, or, as an array, contains it | `wrong_audience` |
 | R11 | With leeway L: refused when now ≥ `exp` + L; when `nbf` is present and now < `nbf` − L; when now < `iat` − L | `expired`, `not_yet_valid`, `issued_in_future` |
 | R12 | `tid` equals the configured tenant | `wrong_tenant` |
-| R13 | No `sys` claim, whatever its value, `null` and `false` included: its presence is the mark. A system's own token never stands for a person | `system_token` |
+| R13 | No `sys` claim, whatever its value, `null` and `false` included: its presence is the mark. A system's own token never stands for a person. Then no `token_use` claim, whatever its value, unless the backend allows client tokens (`allow_client_tokens`): a client's own token stands for a machine, not a person. A token with both is refused as a system's | `system_token`, `client_token` |
 | R14 | `anon` is not `true`, unless the backend allows guests | `anonymous_token` |
 
 ## Keys and refetching
@@ -101,6 +102,7 @@ The list is closed: a verifier reports one of these and no other, and the vector
 | `issued_in_future` | R11 | `iat` ahead of now, beyond the leeway |
 | `wrong_tenant` | R12 | `tid` is another workspace |
 | `system_token` | R13 | A system's own token |
+| `client_token` | R13 | A client's own token where client tokens are not allowed |
 | `anonymous_token` | R14 | A guest's token where guests are not allowed |
 
 ## Vectors
@@ -109,7 +111,7 @@ The list is closed: a verifier reports one of these and no other, and the vector
 | --- | --- |
 | `vectors/keys/*.jwk.json` | The test keys, as private JWKs. **Test only**: they are public on purpose and sign nothing real |
 | `vectors/jwks.json` | The set a verifier loads: the current key, the previous key, a 1024-bit key, and a key published with `use: enc` |
-| `vectors/tokens.json` | Every case: `name`, `rule`, `description`, `token`, `now` (seconds since the epoch), `config` (`issuer`, `audience`, `tenant`, and `issuers` and `allow_anonymous` when set), `expect` (`valid` or `invalid`) and, for an invalid one, `reason` |
+| `vectors/tokens.json` | Every case: `name`, `rule`, `description`, `token`, `now` (seconds since the epoch), `config` (`issuer`, `audience`, `tenant`, and `issuers`, `allow_anonymous` and `allow_client_tokens` when set), `expect` (`valid` or `invalid`) and, for an invalid one, `reason` |
 
 Every case is built to be accepted, or to be refused by one rule only, so the reason is the same whatever order a verifier runs its checks in. The vectors assume the default leeway (30 seconds) and the 8192-byte limit; a case at a boundary says so in its description.
 
