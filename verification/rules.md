@@ -11,7 +11,7 @@ An access token is a JWS in compact form, signed RS256.
 | Header | `alg: RS256`, `kid` (always), `typ: JWT` |
 | `iss` | Cauthy's issuer, as configured for the deployment, with no trailing slash; or, for a token issued on a workspace's custom domain, that domain's origin |
 | `aud` | An array with one string: the deployment's audience. An AI agent's token carries the resource it was issued for instead |
-| `sub` | The person's id, a lowercase UUID. On a system's own token, the id of the client the system signs in as |
+| `sub` | The person's id, a lowercase UUID. On a system's own token, the id of the client the system signs in as; on a client's own token, the client's internal id |
 | `tid` | The workspace's id, a lowercase UUID |
 | `iat`, `exp` | Seconds since the epoch. A person's token lives 15 minutes by default; a system's own token, 10 |
 | `nbf` | Never written. A verifier still honours it when present |
@@ -20,11 +20,12 @@ An access token is a JWS in compact form, signed RS256.
 | `email`, `email_verified` | The person's address, and whether Cauthy had verified it when the token was issued (a boolean); both absent on a guest's token. A token issued before Cauthy wrote `email_verified` lacks it: read it as `false` |
 | `anon` | `true` on a guest's token |
 | `sys`, `sys_import` | Present only on a system's own token |
-| (none) | A machine-to-machine token, issued for a `client_credentials` grant, has `sub` = the client's id, the client's roles and no `email`, and is otherwise indistinguishable from a person's token today. Nothing in it says it is not a person. A later Cauthy version will mark it with a claim of its own; until then a backend that must tell the two apart keeps its own list of client ids. Rule R13 will refuse the mark when it exists, as it refuses `sys` |
+| `token_use`, `client_id` | `token_use: "client"` and the client's public `client_id` on a `client_credentials` token (a client's own token, with the client's roles and no `email`); never on a person's. Rule R13 refuses it unless the backend allows client tokens |
+| `azp` | The `client_id` of the client a person's token was issued through; absent when none was named. Never on a client's own token or an AI agent's. Rule R15 checks it when the backend names its client |
 | `auth_time`, `keep` | When the session began, and whether it is a long one |
-| `custom`, `scope`, `client_id`, `act` | Present on some tokens; ignored by these rules |
+| `custom`, `scope`, `act` | Present on some tokens; ignored by these rules. An AI agent's token also carries `client_id`, the agent's |
 
-The keys are published at `<issuer>/.well-known/jwks.json`: every active key as `kty: RSA`, `use: sig`, `alg: RS256`, with its `kid`, answered with `Cache-Control: public, max-age=3600`. During a rotation the set holds the previous key beside the current one, and tokens signed with either are valid.
+The keys are published at `<issuer>/.well-known/jwks.json`: every active key as `kty: RSA`, `use: sig`, `alg: RS256`, with its `kid`, answered with `Cache-Control: public, max-age=300`. Cauthy publishes a key at least `max-age` (300 seconds) before it signs with it, and keeps the previous key published while its tokens can be valid: during a rotation the set holds the previous key beside the current one, and tokens signed with either are valid.
 
 ## Configuration
 
@@ -68,8 +69,8 @@ The rules run in this order, and a token is refused at the first one it breaks, 
 | Rule | Check |
 | --- | --- |
 | K1 | The JWKS is `<issuer>/.well-known/jwks.json`, fetched with GET, following no redirect, within 5 seconds; only a `200` of at most 64 KiB counts |
-| K2 | The set is fetched on first use and again once older than the answer's `max-age`, capped at one hour (5 minutes when the answer names none) |
-| K3 | A `kid` the set does not hold triggers a fetch only when the last fetch started at least the cooldown ago (default 30 seconds). Otherwise the token is refused at once with `unknown_kid`. A `kid` found unknown is never remembered as bad: after the cooldown, the next token that names it fetches again. So forged `kid`s cause at most one fetch per cooldown, and a key Cauthy has just started signing with is accepted at most one cooldown after its first token arrives |
+| K2 | The set is fetched on first use and again once older than the answer's `max-age`, capped at one hour (5 minutes when the answer names none). Cauthy answers `max-age=300`, and publishes a key at least that long before it signs with it, so a verifier that follows K2 holds a new key before the first token signed with it arrives |
+| K3 | A `kid` the set does not hold triggers a fetch only when the last fetch started at least the cooldown ago (default 30 seconds). Otherwise the token is refused at once with `unknown_kid`. A `kid` found unknown is never remembered as bad: after the cooldown, the next token that names it fetches again. So forged `kid`s cause at most one fetch per cooldown, and a key Cauthy has just started signing with is accepted at most one cooldown after its first token arrives (and, because Cauthy publishes it `max-age` ahead, usually at once). Cauthy keeps the previous key published while its tokens can be valid, so a refetch never drops a key a live token needs |
 | K4 | One fetch at a time: a token that needs the set while it is being fetched waits for that fetch |
 | K5 | A failed fetch keeps the last good set |
 | K6 | A set in which two usable keys share a `kid` is refused as a whole (K5 applies) |
@@ -79,7 +80,6 @@ The rules run in this order, and a token is refused at the first one it breaks, 
 - **Revocation.** Cauthy revokes a token by its `jti` on its own side; a verifier that works offline cannot see that, and accepts the token until `exp`. A backend that must see a sign-out at once asks Cauthy instead.
 - **Business roles.** `roles` are workspace-wide; see [`identity/rules.md`](../identity/rules.md).
 - **A verified address, now.** `email_verified` is what Cauthy knew when it issued the token, up to 15 minutes ago; see [`identity/rules.md`](../identity/rules.md).
-- **A machine.** A machine-to-machine token passes as a person's today; see the table above.
 
 ## Reason codes
 
