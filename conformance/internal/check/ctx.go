@@ -1,6 +1,9 @@
 package check
 
 import (
+	"time"
+
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/admin"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/client"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/routes"
 )
@@ -15,6 +18,11 @@ type Ctx struct {
 	Email    string
 	Password string
 	JWKSPath string // "" when the backend is not in contract mode
+	// Admin changes the tenant's settings in Cauthy for the switch checks;
+	// nil when the run has no Cauthy (--cauthy), and then they skip.
+	Admin *admin.Client
+	// SwitchWait is how long the backend has to follow a switch; 0 is 10 s.
+	SwitchWait time.Duration
 
 	signIns map[string]*signInEntry
 	methods *methodsEntry
@@ -61,12 +69,17 @@ func (c *Ctx) Methods() (*client.Response, error) {
 }
 
 // Cleanup signs out every session the run opened, best effort, so a run leaves
-// none open. It is safe to call twice.
+// none open, and puts back any tenant setting a switch check left changed (a
+// switch check puts back its own; this is for a run stopped half way). It is
+// safe to call twice.
 func (c *Ctx) Cleanup() {
 	for slot, e := range c.signIns {
 		if e.err == nil && e.res != nil && e.res.Status == 200 {
 			e.browser.PostJSON("/sign-out", map[string]any{}, map[string]string{"X-Cauthy-Request": "1"})
 		}
 		delete(c.signIns, slot)
+	}
+	if c.Admin != nil {
+		c.Admin.Restore()
 	}
 }
