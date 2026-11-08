@@ -161,3 +161,20 @@ func TestNAWithoutAPairBecomesASkip(t *testing.T) {
 		t.Fatal("the unpaired n/a must leave the run incomplete")
 	}
 }
+
+func TestSwitchesIsAboveStrict(t *testing.T) {
+	reg := &Registry{}
+	reg.Add(Check{ID: "strict.protocol_header", Group: "strict", Level: Strict, Run: func(*Ctx) Result { return Pass("ok") }})
+	reg.Add(Check{ID: "switches.sign_up", Group: "switches", Level: Switches, Run: func(*Ctx) Result { return Fail("signUp stayed true") }})
+	reg.Add(Check{ID: "switches.password", Group: "switches", Level: Switches, Run: func(*Ctx) Result { return Skip("needs --cauthy") }})
+	for _, level := range []Level{Basic, Strict} {
+		rep := reg.Run(&Ctx{}, level)
+		if rep.Results[1].Status != StatusAdvisory || !rep.Passed() || !rep.Complete() {
+			t.Fatalf("%s: a switch check is advisory and its skip does not make the run incomplete: %+v", level, rep.Results)
+		}
+	}
+	rep := reg.Run(&Ctx{}, Switches)
+	if rep.Level != "switches" || rep.Results[1].Status != StatusFail || rep.Passed() || rep.Complete() {
+		t.Fatalf("at switches a switch check counts: %+v", rep)
+	}
+}

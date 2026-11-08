@@ -13,11 +13,17 @@ type Level int
 const (
 	Basic Level = iota
 	Strict
+	// Switches is strict plus the dashboard-switch checks, which need a Cauthy
+	// and an admin token (Ctx.Admin).
+	Switches
 )
 
 func (l Level) String() string {
-	if l == Strict {
+	switch l {
+	case Strict:
 		return "strict"
+	case Switches:
+		return "switches"
 	}
 	return "basic"
 }
@@ -153,8 +159,11 @@ func (rep *Report) Passed() bool {
 func (rep *Report) Complete() bool { return rep.skipped() == 0 }
 
 func levelOf(name string) Level {
-	if name == Strict.String() {
+	switch name {
+	case Strict.String():
 		return Strict
+	case Switches.String():
+		return Switches
 	}
 	return Basic
 }
