@@ -245,8 +245,8 @@
       "id": "switches.confirm_email",
       "group": "switches",
       "level": "switches",
-      "status": "advisory",
-      "detail": "rate limited by the backend or Cauthy: POST /sign-up/email answered 429 {\"error\":{\"code\":\"rate_limited\",\"message\":\"too many requests — please slow down\"}}"
+      "status": "pass",
+      "detail": "confirm_email on then off in Cauthy: /sign-up/email held then signed the account in"
     },
     {
       "id": "switches.persistent_sessions",
@@ -259,10 +259,10 @@
   "passed": true,
   "complete": true,
   "counts": {
-    "advisory": 6,
+    "advisory": 5,
     "fail": 0,
     "n/a": 1,
-    "pass": 29,
+    "pass": 30,
     "skip": 0
   }
 }
