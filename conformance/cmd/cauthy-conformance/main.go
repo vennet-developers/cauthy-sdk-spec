@@ -4,6 +4,10 @@
 //	CONFORMANCE_PASSWORD=… cauthy-conformance --target http://localhost:3999/api/auth \
 //	  --origin http://localhost:3999 --email member@example.com --level basic [--json report.json]
 //
+// With --cauthy (and an admin token in the variable --admin-token-env names)
+// it also flips the tenant's dashboard switches and checks the backend
+// follows; --level switches requires it.
+//
 // Exit codes: 0 passed and complete; 1 a check failed; 2 usage or config
 // error; 3 nothing failed but a check at or below the level was skipped.
 package main
@@ -16,12 +20,15 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/runner"
 )
 
 type options struct {
 	target, origin, email, password, level, table, jsonOut, jwksPath string
+	cauthy, tenant, adminTokenEnv, adminToken, clientID              string
+	switchWait                                                       time.Duration
 }
 
 func main() {
@@ -29,15 +36,23 @@ func main() {
 	flag.StringVar(&o.target, "target", "", "the backend's prefix, e.g. http://localhost:3999/api/auth")
 	flag.StringVar(&o.origin, "origin", "", "the application's origin, e.g. http://localhost:3999")
 	flag.StringVar(&o.email, "email", "", "a password account in the backend's tenant")
-	flag.StringVar(&o.level, "level", "basic", "basic or strict")
+	flag.StringVar(&o.level, "level", "basic", "basic, strict or switches")
 	flag.StringVar(&o.table, "table", "", "a route table to use instead of the embedded one")
 	flag.StringVar(&o.jsonOut, "json", "", "also write the report as JSON to this file")
 	flag.StringVar(&o.jwksPath, "jwks-path", "", "contract mode: the JWKS path the backend serves")
+	flag.StringVar(&o.cauthy, "cauthy", "", "Cauthy's address, for the dashboard-switch checks")
+	flag.StringVar(&o.tenant, "tenant", "", "the backend's workspace slug in Cauthy")
+	flag.StringVar(&o.adminTokenEnv, "admin-token-env", "CAUTHY_ADMIN_TOKEN", "the environment variable that holds Cauthy's admin token")
+	flag.StringVar(&o.clientID, "client-id", "", "the backend's OAuth client in Cauthy, for the persistent-sessions switch")
+	flag.DurationVar(&o.switchWait, "switch-wait", 10*time.Second, "how long the backend has to follow a switch")
 	flag.Usage = usage
 	flag.Parse()
-	// The password is read from the environment only: a flag would end up in
-	// shell history and the process list.
+	// The password and the admin token are read from the environment only: a
+	// flag would end up in shell history and the process list.
 	o.password = os.Getenv("CONFORMANCE_PASSWORD")
+	if o.cauthy != "" {
+		o.adminToken = os.Getenv(o.adminTokenEnv)
+	}
 	// Ctrl-C stops the run: no request starts after it.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	code := run(ctx, o, os.Stdout, os.Stderr)
@@ -52,6 +67,7 @@ func usage() {
 	fmt.Fprint(w, `
 environment:
   CONFORMANCE_PASSWORD  the test account's password (never a flag)
+  CAUTHY_ADMIN_TOKEN    with --cauthy: a token of the tenant's admin (another name with --admin-token-env)
 
 exit codes:
   0  every check of the level passed and none was skipped
@@ -73,7 +89,8 @@ func run(ctx context.Context, o options, out, errOut io.Writer) int {
 		table = raw
 	}
 	res, err := runner.Run(ctx, runner.Options{Target: o.target, Origin: o.origin, Email: o.email, Password: o.password,
-		Level: o.level, JWKSPath: o.jwksPath, Table: table})
+		Level: o.level, JWKSPath: o.jwksPath, Table: table,
+		Cauthy: o.cauthy, Tenant: o.tenant, AdminToken: o.adminToken, ClientID: o.clientID, SwitchWait: o.switchWait})
 	var usage *runner.UsageError
 	if errors.As(err, &usage) {
 		fmt.Fprintln(errOut, usage.Msg)

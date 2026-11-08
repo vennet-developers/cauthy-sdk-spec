@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/fake"
 )
@@ -99,5 +100,35 @@ func TestJSONWriteFailureExits2(t *testing.T) {
 	code := run(context.Background(), options{target: srv.Target(), origin: srv.URL, email: srv.Email, password: srv.Password, level: "basic", table: table, jsonOut: bad}, &out, &errOut)
 	if code != 2 || errOut.Len() == 0 {
 		t.Fatalf("exit %d, stderr %q; want 2 with a message", code, errOut.String())
+	}
+}
+
+func TestSwitchesAgainstTheFake(t *testing.T) {
+	for name, tc := range map[string]struct {
+		k    fake.Knobs
+		code int
+	}{
+		"follows the dashboard": {fake.Knobs{Strict: true}, 0},
+		"reads settings once":   {fake.Knobs{Strict: true, StaleSettings: true}, 1},
+	} {
+		srv := fake.New(tc.k)
+		base := srv.StartCauthy("admin-token")
+		var out bytes.Buffer
+		code := run(context.Background(), options{
+			target: srv.Target(), origin: srv.URL, email: srv.Email, password: srv.Password, level: "switches", table: table,
+			cauthy: base, tenant: fake.Tenant, adminToken: "admin-token", clientID: fake.ClientID, switchWait: time.Second,
+		}, &out, &out)
+		srv.Close()
+		if code != tc.code || !strings.Contains(out.String(), "switches.sign_up") || strings.Contains(out.String(), "admin-token") {
+			t.Errorf("%s: exit %d, want %d:\n%s", name, code, tc.code, out.String())
+		}
+	}
+}
+
+func TestSwitchesWithoutCauthyIsAUsageError(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := run(context.Background(), options{target: "http://x", origin: "http://x", level: "switches", table: table}, &out, &errOut)
+	if code != 2 || !strings.Contains(errOut.String(), "--cauthy") {
+		t.Fatalf("exit %d, stderr %q", code, errOut.String())
 	}
 }
