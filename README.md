@@ -8,6 +8,10 @@ The specification behind every Cauthy SDK, and the suite that proves an SDK foll
 | `protocol/auth-bff.md` | The `/api/auth/*` protocol a backend SDK serves and a client SDK consumes |
 | `protocol/routes.yaml` | The route table: one entry per route, the source of truth |
 | `openapi/auth-bff.yaml` | The same routes as OpenAPI 3.1, generated from the table |
+| `openapi/cauthy.yaml` | Cauthy's public API, extracted from Cauthy and checked against it (`openapi/README.md`) |
+| `openapi/probes.yaml` | The requests `cauthy-api-check` sends to prove a Cauthy matches `cauthy.yaml` |
+| `go/cauthyapi` | Go types of `cauthy.yaml` (module `github.com/vennet-developers/cauthy-sdk-spec/go`, standard library only) |
+| `packages/spec` | `@cauthyhq/spec`: TypeScript types of `cauthy.yaml` and `auth-bff.yaml` |
 | `identity/rules.md` | What a token guarantees and what an application must never assume |
 | `verification/rules.md` | What a backend checks on a Cauthy access token, and the closed list of reason codes |
 | `vectors/` | Signed test tokens and the verdict every verifier must reach, generated from test-only keys |
@@ -56,6 +60,19 @@ After changing a case or a rule, regenerate the vectors (the keys stay):
     cd conformance && go run ./cmd/gen-vectors ../vectors/keys ../vectors
 
 The keys in `vectors/keys` are test-only and public on purpose; see `vectors/keys/README.md`.
+
+## Check a Cauthy against its public API
+
+`openapi/README.md` says how `cauthy.yaml` is made and how `cauthy-api-check` proves a running
+Cauthy matches it.
+
+## Release
+
+| What | Tag | How |
+| --- | --- | --- |
+| The runner and the API check (Go module `conformance`) | `conformance/vX.Y.Z` | the tag is the release |
+| The Go types (Go module `go`) | `go/vX.Y.Z` | the tag is the release |
+| `@cauthyhq/spec` | `spec/vX.Y.Z` (= `packages/spec/package.json`'s version) | `release.yml`, approved in the `npm` environment, trusted publishing |
 
 ## License
 
