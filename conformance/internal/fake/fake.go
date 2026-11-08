@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 
@@ -49,6 +50,52 @@ type Knobs struct {
 	LogoutNotExempt       bool // POST /logout needs X-Cauthy-Request at strict
 	LogoutMissing         bool // /logout is not served: 404
 	SessionUncacheable404 bool // GET /session answers 404 without Cache-Control
+
+	// The dashboard switches: each makes the backend ignore the tenant's
+	// settings in Cauthy (StartCauthy) in one way.
+	StaleSettings         bool // reads the settings once, at start: no switch takes effect
+	SignupAlwaysOpen      bool // /methods says signUp, and /sign-up/email signs up, whatever the tenant says
+	PasswordAlwaysOffered bool // /methods says passwordSignIn, and a password signs in, whatever the tenant says
+	MagicLinkNeverOffered bool // /methods never says magicLink
+	PasskeyAlwaysOffered  bool // /methods says passkey whatever the tenant says
+	ConfirmEmailIgnored   bool // a sign-up signs in even when the tenant asks to confirm the address
+}
+
+// Tenant and ClientID are what the fake Cauthy (StartCauthy) answers to.
+const (
+	Tenant   = "acme"
+	ClientID = "acme-crm"
+)
+
+// settingKeys are the tenant settings the fake keeps, and their defaults.
+var settingKeys = map[string]any{"allow_signup": true, "allow_password": true, "allow_magic_link": false,
+	"allow_passkeys": false, "confirm_email": false, "verify_grace_days": float64(0)}
+
+// tenant is what the fake Cauthy holds for its one workspace.
+type tenant struct {
+	mu         sync.Mutex
+	settings   map[string]any
+	persistent bool              // the backend's client allows persistent sessions
+	accounts   map[string]string // address → id, of the accounts signed up
+	n          int
+}
+
+func newTenant() *tenant {
+	t := &tenant{settings: map[string]any{}, accounts: map[string]string{}}
+	for k, v := range settingKeys {
+		t.settings[k] = v
+	}
+	return t
+}
+
+func (t *tenant) snapshot() (map[string]any, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make(map[string]any, len(t.settings))
+	for k, v := range t.settings {
+		out[k] = v
+	}
+	return out, t.persistent
 }
 
 type Server struct {
@@ -62,6 +109,12 @@ type Server struct {
 	signIns  int             // sessions opened so far
 	signedIn map[string]bool // cookie value → signed in
 	table    *routes.Table
+
+	tenant          *tenant
+	staleSettings   map[string]any // the settings as read at start, for StaleSettings
+	stalePersistent bool
+	cauthy          *httptest.Server
+	adminToken      string
 }
 
 var (
@@ -92,10 +145,180 @@ func newSessionValue() string {
 const prefix = "/api/auth"
 
 func New(k Knobs) *Server {
-	s := &Server{Knobs: k, Email: "ana@example.com", Password: "correct horse battery staple", signedIn: map[string]bool{}, table: loadTable()}
+	s := &Server{Knobs: k, Email: "ana@example.com", Password: "correct horse battery staple", signedIn: map[string]bool{}, table: loadTable(),
+		tenant: newTenant()}
+	s.staleSettings, s.stalePersistent = s.tenant.snapshot()
 	s.Server = httptest.NewServer(http.HandlerFunc(s.handle))
 	s.appOrigin = s.URL
 	return s
+}
+
+// Close stops the backend, and the fake Cauthy when it was started.
+func (s *Server) Close() {
+	s.Server.Close()
+	if s.cauthy != nil {
+		s.cauthy.Close()
+	}
+}
+
+// setting is a tenant setting as the backend reads it: live, or as it was at
+// start with StaleSettings.
+func (s *Server) setting(k string) bool {
+	if s.Knobs.StaleSettings {
+		on, _ := s.staleSettings[k].(bool)
+		return on
+	}
+	now, _ := s.tenant.snapshot()
+	on, _ := now[k].(bool)
+	return on
+}
+
+// persistentAllowed says whether remember may make a long session: the knob,
+// or the backend's client in Cauthy.
+func (s *Server) persistentAllowed() bool {
+	if s.Knobs.PersistentAllowed {
+		return true
+	}
+	if s.Knobs.StaleSettings {
+		return s.stalePersistent
+	}
+	_, p := s.tenant.snapshot()
+	return p
+}
+
+// Setting answers a tenant setting as the fake Cauthy holds it, for tests.
+func (s *Server) Setting(k string) any {
+	now, _ := s.tenant.snapshot()
+	return now[k]
+}
+
+// ClientPersistent says whether the fake Cauthy lets the backend's client keep long sessions.
+func (s *Server) ClientPersistent() bool {
+	_, p := s.tenant.snapshot()
+	return p
+}
+
+// Accounts lists the addresses signed up and not deleted, for tests.
+func (s *Server) Accounts() []string {
+	s.tenant.mu.Lock()
+	defer s.tenant.mu.Unlock()
+	out := make([]string, 0, len(s.tenant.accounts))
+	for email := range s.tenant.accounts {
+		out = append(out, email)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// StartCauthy serves the fake's Cauthy admin API on a port of its own and
+// answers its address, what --cauthy points at. token is the bearer it takes;
+// the workspace is Tenant and the backend's client ClientID.
+func (s *Server) StartCauthy(token string) string {
+	s.adminToken = token
+	s.cauthy = httptest.NewServer(http.HandlerFunc(s.admin))
+	return s.cauthy.URL
+}
+
+func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
+	refuse := func(status int, code string) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(map[string]any{"errors": []any{map[string]any{"code": code, "message": code}}})
+	}
+	data := func(status int, v any) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(map[string]any{"data": v})
+	}
+	if s.adminToken == "" || r.Header.Get("Authorization") != "Bearer "+s.adminToken {
+		refuse(401, "unauthorized")
+		return
+	}
+	if r.Header.Get("X-Tenant-Key") != Tenant {
+		refuse(404, "tenant_not_found")
+		return
+	}
+	t := s.tenant
+	route := r.Method + " " + r.URL.Path
+	switch {
+	case route == "GET /v1/settings/auth":
+		now, _ := t.snapshot()
+		data(200, now)
+	case route == "PUT /v1/settings/auth":
+		var change map[string]any
+		if json.NewDecoder(r.Body).Decode(&change) != nil {
+			refuse(400, "bad_request")
+			return
+		}
+		t.mu.Lock()
+		next := map[string]any{}
+		for k, v := range t.settings {
+			next[k] = v
+		}
+		for k, v := range change {
+			if _, known := settingKeys[k]; known && v != nil {
+				next[k] = v
+			}
+		}
+		if next["allow_password"] == false && next["allow_magic_link"] != true && next["allow_passkeys"] != true {
+			t.mu.Unlock()
+			refuse(409, "last_method")
+			return
+		}
+		t.settings = next
+		t.mu.Unlock()
+		now, _ := t.snapshot()
+		data(200, now)
+	case route == "GET /v1/oauth/clients":
+		_, p := t.snapshot()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"client_id": ClientID, "allow_persistent_sessions": p}}, "total_count": 1})
+	case route == "PATCH /v1/oauth/clients/"+ClientID:
+		var change struct {
+			AllowPersistentSessions *bool `json:"allow_persistent_sessions"`
+		}
+		if json.NewDecoder(r.Body).Decode(&change) != nil {
+			refuse(400, "bad_request")
+			return
+		}
+		t.mu.Lock()
+		if change.AllowPersistentSessions != nil {
+			t.persistent = *change.AllowPersistentSessions
+		}
+		p := t.persistent
+		t.mu.Unlock()
+		data(200, map[string]any{"client_id": ClientID, "allow_persistent_sessions": p})
+	case route == "GET /v1/users":
+		q := strings.ToLower(r.URL.Query().Get("q"))
+		t.mu.Lock()
+		list := []any{}
+		for email, id := range t.accounts {
+			if strings.Contains(strings.ToLower(email), q) {
+				list = append(list, map[string]any{"id": id, "email": email})
+			}
+		}
+		t.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"data": list, "total_count": len(list)})
+	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/users/"):
+		id := strings.TrimPrefix(r.URL.Path, "/v1/users/")
+		t.mu.Lock()
+		found := false
+		for email, have := range t.accounts {
+			if have == id {
+				delete(t.accounts, email)
+				found = true
+			}
+		}
+		t.mu.Unlock()
+		if !found {
+			refuse(404, "user_not_found")
+			return
+		}
+		w.WriteHeader(204)
+	default:
+		refuse(404, "not_found")
+	}
 }
 
 // SignIns says how many sessions the server has opened; OpenSessions how many are still open.
@@ -340,9 +563,11 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", "https://auth.example/authorize")
 		w.WriteHeader(302)
 	case "GET /methods":
-		m := map[string]any{"providers": []any{}, "passwordSignIn": true, "signUp": true, "magicLink": false,
-			"passkey": false, "passkeyHere": false, "passkeyOnCauthy": false, "sso": false}
-		if s.Knobs.PersistentAllowed {
+		passkeys := s.setting("allow_passkeys") || s.Knobs.PasskeyAlwaysOffered
+		m := map[string]any{"providers": []any{}, "passwordSignIn": s.setting("allow_password") || s.Knobs.PasswordAlwaysOffered,
+			"signUp": s.setting("allow_signup") || s.Knobs.SignupAlwaysOpen, "magicLink": s.setting("allow_magic_link") && !s.Knobs.MagicLinkNeverOffered,
+			"passkey": passkeys, "passkeyHere": false, "passkeyOnCauthy": passkeys, "sso": false}
+		if s.persistentAllowed() {
 			m["persistentSessions"] = true
 		}
 		s.write(w, 200, m)
@@ -375,6 +600,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			s.problem(w, 400, "required", "The password is required", "password")
 			return
 		}
+		if !s.setting("allow_password") && !s.Knobs.PasswordAlwaysOffered {
+			s.problem(w, 403, "password_disabled", "This workspace does not take passwords", "")
+			return
+		}
 		if s.Knobs.SignInBroken || email != s.Email || password != s.Password {
 			s.problem(w, 401, "invalid_credentials", "Wrong email or password", "")
 			return
@@ -384,9 +613,50 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		remember, _ := body["remember"].(bool)
-		persistent := remember && (s.Knobs.PersistentAllowed || s.Knobs.RememberIgnoresTenant)
+		persistent := remember && (s.persistentAllowed() || s.Knobs.RememberIgnoresTenant)
 		value := newSessionValue()
 		s.setSession(w, value, persistent)
+		out := map[string]any{"status": "signed_in", "session": s.sessionFor(value)}
+		if s.Knobs.Strict {
+			out["next"] = "done"
+		}
+		s.write(w, 200, out)
+	case "POST /sign-up/email":
+		var body map[string]any
+		if json.NewDecoder(r.Body).Decode(&body) != nil || body == nil {
+			s.problem(w, 400, "bad_request", "A JSON object is required", "")
+			return
+		}
+		email, _ := body["email"].(string)
+		password, _ := body["password"].(string)
+		switch {
+		case email == "":
+			s.problem(w, 400, "required", "The email is required", "email")
+			return
+		case !strings.Contains(email, "@"):
+			s.problem(w, 400, "invalid_email", "That is not an email", "email")
+			return
+		case password == "":
+			s.problem(w, 400, "required", "The password is required", "password")
+			return
+		case !s.setting("allow_signup") && !s.Knobs.SignupAlwaysOpen:
+			s.problem(w, 403, "signups_disabled", "This workspace is not accepting new accounts", "")
+			return
+		}
+		s.tenant.mu.Lock()
+		s.tenant.n++
+		s.tenant.accounts[email] = fmt.Sprintf("acct-%d", s.tenant.n)
+		s.tenant.mu.Unlock()
+		if s.setting("confirm_email") && !s.Knobs.ConfirmEmailIgnored {
+			out := map[string]any{"status": "verification_required", "email": email}
+			if s.Knobs.Strict {
+				out["next"] = "verify_email"
+			}
+			s.write(w, 200, out)
+			return
+		}
+		value := newSessionValue()
+		s.setSession(w, value, false)
 		out := map[string]any{"status": "signed_in", "session": s.sessionFor(value)}
 		if s.Knobs.Strict {
 			out["next"] = "done"
