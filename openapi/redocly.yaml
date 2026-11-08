@@ -1,0 +1,7 @@
+# Lint rules for openapi/cauthy.yaml: Redocly's recommended set, with one rule off.
+# An error fails CI; a warning is printed and kept as a to-do.
+extends:
+  - recommended
+rules:
+  # The servers name example.com on purpose: this repository carries no real host.
+  no-server-example.com: off
