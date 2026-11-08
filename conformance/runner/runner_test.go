@@ -62,10 +62,13 @@ func TestRunUsageErrors(t *testing.T) {
 		o    runner.Options
 		want string
 	}{
-		"no target":     {runner.Options{Origin: "http://x"}, "--target"},
-		"no origin":     {runner.Options{Target: "http://x"}, "--origin"},
-		"unknown level": {runner.Options{Target: "http://x", Origin: "http://x", Level: "loose"}, "--level"},
-		"bad table":     {runner.Options{Target: "http://x", Origin: "http://x", Table: []byte("version: 9\n")}, "table"},
+		"no target":               {runner.Options{Origin: "http://x"}, "--target"},
+		"no origin":               {runner.Options{Target: "http://x"}, "--origin"},
+		"unknown level":           {runner.Options{Target: "http://x", Origin: "http://x", Level: "loose"}, "--level"},
+		"bad table":               {runner.Options{Target: "http://x", Origin: "http://x", Table: []byte("version: 9\n")}, "table"},
+		"switches without cauthy": {runner.Options{Target: "http://x", Origin: "http://x", Level: runner.Switches}, "--cauthy"},
+		"cauthy without tenant":   {runner.Options{Target: "http://x", Origin: "http://x", Cauthy: "http://c", AdminToken: "t"}, "--tenant"},
+		"cauthy without token":    {runner.Options{Target: "http://x", Origin: "http://x", Cauthy: "http://c", Tenant: "acme"}, "admin token"},
 	} {
 		_, err := runner.Run(context.Background(), tc.o)
 		if !errors.Is(err, runner.ErrUsage) || !strings.Contains(err.Error(), tc.want) {
@@ -80,9 +83,9 @@ func TestRunUsageErrors(t *testing.T) {
 }
 
 func TestOptionsNeverShowThePassword(t *testing.T) {
-	o := runner.Options{Target: "http://x/api/auth", Origin: "http://x", Email: "ana@example.com", Password: "s3cret-pw"}
+	o := runner.Options{Target: "http://x/api/auth", Origin: "http://x", Email: "ana@example.com", Password: "s3cret-pw", Cauthy: "http://c", Tenant: "acme", AdminToken: "s3cret-admin"}
 	for _, verb := range []string{"%v", "%+v", "%#v", "%s"} {
-		if got := fmt.Sprintf(verb, o); strings.Contains(got, "s3cret-pw") || !strings.Contains(got, "ana@example.com") {
+		if got := fmt.Sprintf(verb, o); strings.Contains(got, "s3cret") || !strings.Contains(got, "ana@example.com") {
 			t.Errorf("%s: %s", verb, got)
 		}
 	}

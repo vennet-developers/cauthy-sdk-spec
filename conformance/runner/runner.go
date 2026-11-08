@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/admin"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/checks"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/client"
@@ -16,8 +18,9 @@ import (
 
 // The levels a run grades at.
 const (
-	Basic  = "basic"  // what a cauthy-auth 0.x backend meets; the default
-	Strict = "strict" // protocol 1 in full
+	Basic    = "basic"    // what a cauthy-auth 0.x backend meets; the default
+	Strict   = "strict"   // protocol 1 in full
+	Switches = "switches" // strict, plus the dashboard switches (needs Cauthy)
 )
 
 // Options says what to drive. Password is never logged or reported, and
@@ -27,9 +30,17 @@ type Options struct {
 	Origin   string // the application's origin, e.g. http://localhost:3999
 	Email    string // a password account in the backend's tenant; "" skips the signed-in checks
 	Password string
-	Level    string // Basic (default) or Strict
+	Level    string // Basic (default), Strict or Switches
 	JWKSPath string // contract mode: the JWKS path the backend serves; "" otherwise
 	Table    []byte // a route table instead of the embedded one; nil for the embedded
+
+	// The dashboard-switch checks change the tenant's settings in Cauthy and
+	// put them back. Without Cauthy they skip (and level switches is refused).
+	Cauthy     string        // Cauthy's address, e.g. http://localhost:8080
+	Tenant     string        // the backend's workspace slug
+	AdminToken string        // a token with settings:manage, oauth_clients:manage, users:manage and users:delete; never printed
+	ClientID   string        // the backend's OAuth client, for the persistent-sessions switch; "" skips that one
+	SwitchWait time.Duration // how long the backend has to follow a switch; 0 is 10 s
 }
 
 // String shows the options with the password masked, so a logged Options
@@ -43,8 +54,12 @@ func (o Options) String() string {
 	if o.Table != nil {
 		table = fmt.Sprintf("%d bytes", len(o.Table))
 	}
-	return fmt.Sprintf("{Target:%s Origin:%s Email:%s Password:%s Level:%s JWKSPath:%s Table:%s}",
-		o.Target, o.Origin, o.Email, pw, o.Level, o.JWKSPath, table)
+	token := ""
+	if o.AdminToken != "" {
+		token = "[hidden]"
+	}
+	return fmt.Sprintf("{Target:%s Origin:%s Email:%s Password:%s Level:%s JWKSPath:%s Table:%s Cauthy:%s Tenant:%s AdminToken:%s ClientID:%s SwitchWait:%s}",
+		o.Target, o.Origin, o.Email, pw, o.Level, o.JWKSPath, table, o.Cauthy, o.Tenant, token, o.ClientID, o.SwitchWait)
 }
 
 // GoString keeps %#v from printing the password too.
@@ -105,8 +120,19 @@ func Run(ctx context.Context, o Options) (Outcome, error) {
 	case "", Basic:
 	case Strict:
 		level = check.Strict
+	case Switches:
+		level = check.Switches
+		if o.Cauthy == "" {
+			return Outcome{}, usagef("--level switches needs --cauthy (Cauthy's address) and an admin token")
+		}
 	default:
-		return Outcome{}, usagef("--level is basic or strict, not %q", o.Level)
+		return Outcome{}, usagef("--level is basic, strict or switches, not %q", o.Level)
+	}
+	if o.Cauthy != "" && o.Tenant == "" {
+		return Outcome{}, usagef("--cauthy needs --tenant (the backend's workspace slug)")
+	}
+	if o.Cauthy != "" && o.AdminToken == "" {
+		return Outcome{}, usagef("--cauthy needs an admin token (--admin-token-env names the variable that holds it)")
 	}
 	var table *routes.Table
 	var err error
@@ -118,7 +144,11 @@ func Run(ctx context.Context, o Options) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, usagef("the route table: %v", err)
 	}
-	c := &check.Ctx{Client: client.NewContext(ctx, o.Target, o.Origin), Table: table, Email: o.Email, Password: o.Password, JWKSPath: o.JWKSPath}
+	c := &check.Ctx{Client: client.NewContext(ctx, o.Target, o.Origin), Table: table, Email: o.Email, Password: o.Password, JWKSPath: o.JWKSPath,
+		SwitchWait: o.SwitchWait}
+	if o.Cauthy != "" {
+		c.Admin = admin.New(ctx, o.Cauthy, o.Tenant, o.AdminToken, o.ClientID)
+	}
 	reg := &check.Registry{}
 	checks.RegisterAll(reg)
 	rep := reg.Run(c, level)
