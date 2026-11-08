@@ -1,0 +1,613 @@
+# The probes cauthy-api-check sends, in order, to check a running Cauthy
+# against openapi/cauthy.yaml. Every operation of the document has at least
+# one; a probe that would change something it cannot undo (create an account,
+# send mail to a person, lock an account out) is a refusal instead: a wrong
+# token, an unknown id, a malformed body, or no session at all.
+#
+# Inputs (--var name=value, or CAUTHY_API_CHECK_<NAME> for a secret):
+#   member_email, member_password  an account that signs in with a password alone
+#                                  (no second step, a confirmed address)
+#   owner_email, owner_password    an account that holds settings:manage,
+#                                  oauth_clients:manage, webhooks:manage,
+#                                  users:manage and users:delete
+#   system                         a system connected to the workspace (POST /v1/connect)
+#   client_id, client_secret       that system's client, whose redirect URI is
+#                                  {origin}/api/auth/callback
+#   origin                         the application origin of that client
+# Builtins: {run}, a random suffix new on every run; {tenant}, the workspace.
+#
+# A probe that creates something deletes it further down. The member's
+# sessions are ended last.
+version: 1
+probes:
+  # ── Discovery and keys ─────────────────────────────────────────────────
+  - id: jwks
+    op: GET /.well-known/jwks.json
+    tenant: false
+    expect: 200
+  - id: openid-configuration
+    op: GET /.well-known/openid-configuration
+    tenant: false
+    expect: 200
+  - id: authorization-server-metadata
+    op: GET /.well-known/oauth-authorization-server
+    tenant: false
+    expect: 200
+  - id: social-icon
+    op: GET /v1/social/icons/{provider}.svg
+    tenant: false
+    params: {provider: google}
+    expect: 200
+
+  # ── What the workspace offers ──────────────────────────────────────────
+  - id: public-settings
+    op: GET /v1/auth/settings
+    expect: 200
+  - id: client-look
+    op: GET /v1/auth/look/{client_id}
+    params: {client_id: "{client_id}"}
+    expect: 200
+  - id: social-providers
+    op: GET /v1/auth/social/providers
+    expect: 200
+  - id: sso-connections
+    op: GET /v1/auth/sso/connections
+    expect: 200
+  - id: passkey-place
+    op: GET /v1/auth/webauthn/place
+    query: {origin: "{origin}"}
+    expect: [200, 503]
+
+  # ── Signing in ─────────────────────────────────────────────────────────
+  - id: login-unknown-account
+    op: POST /v1/auth/login
+    body: {email: "nobody-{run}@example.com", password: "Api-check-{run}-wrong"}
+    expect: 401
+  - id: login-member
+    op: POST /v1/auth/login
+    body: {email: "{member_email}", password: "{member_password}"}
+    expect: 200
+    capture: {member_token: data.access_token}
+  - id: login-owner
+    op: POST /v1/auth/login
+    body: {email: "{owner_email}", password: "{owner_password}"}
+    expect: 200
+    capture: {owner_token: data.access_token}
+  - id: register-malformed
+    op: POST /v1/auth/register
+    body: {email: "not-an-address", password: "short"}
+    expect: [400, 403]
+  - id: anonymous
+    op: POST /v1/auth/anonymous
+    expect: [200, 403]
+  - id: invitation-unknown
+    op: GET /v1/auth/invitation
+    query: {token: "api-check-{run}"}
+    expect: 422
+  - id: invitation-accept-unknown
+    op: POST /v1/auth/invitation/accept
+    body: {token: "api-check-{run}", password: "Api-check-{run}-unused"}
+    expect: [400, 422]
+  - id: email-verify-unknown
+    op: POST /v1/auth/email/verify
+    body: {token: "api-check-{run}"}
+    expect: [400, 422]
+  - id: password-reset
+    op: POST /v1/auth/password/reset
+    body: {email: "nobody-{run}@example.com"}
+    expect: 202
+  - id: password-change-unknown
+    op: POST /v1/auth/password/change
+    body: {token: "api-check-{run}", new_password: "Api-check-{run}-unused"}
+    expect: [400, 422]
+  - id: mfa-challenge-unknown
+    op: POST /v1/auth/mfa/challenge
+    body: {mfa_token: "api-check-{run}", code: "000000"}
+    expect: [400, 401]
+  - id: mfa-send-unknown
+    op: POST /v1/auth/mfa/send
+    body: {mfa_token: "api-check-{run}"}
+    expect: [400, 401]
+  - id: mfa-email-unknown
+    op: POST /v1/auth/mfa/email
+    body: {mfa_token: "api-check-{run}"}
+    expect: [400, 401]
+  - id: mfa-push-unknown
+    op: POST /v1/auth/mfa/push
+    body: {mfa_token: "api-check-{run}"}
+    expect: [400, 401]
+  - id: mfa-push-events-unknown
+    op: GET /v1/auth/mfa/push/events
+    headers: {X-MFA-Token: "api-check-{run}"}
+    expect: [400, 401]
+  - id: mfa-methods-unknown
+    op: POST /v1/auth/mfa/methods
+    body: {mfa_token: "api-check-{run}"}
+    expect: [400, 401]
+  - id: magic-link-request
+    op: POST /v1/auth/magic-link/request
+    body: {email: "nobody-{run}@example.com"}
+    expect: [202, 403]
+  - id: magic-link-verify-unknown
+    op: POST /v1/auth/magic-link/verify
+    body: {token: "api-check-{run}"}
+    expect: [400, 403, 410]
+  - id: magic-link-code-unknown
+    op: POST /v1/auth/magic-link/verify-code
+    body: {email: "nobody-{run}@example.com", code: "000000"}
+    expect: [400, 401, 403]
+  - id: social-start-unknown-provider
+    op: GET /v1/auth/social/{provider}
+    params: {provider: no-such-provider}
+    query: {redirect_uri: "{origin}/api/auth/social/callback"}
+    expect: [400, 404]
+  - id: social-callback-unknown
+    op: GET /v1/auth/social/{provider}/callback
+    params: {provider: google}
+    query: {code: "api-check-{run}", state: "api-check-{run}", redirect_uri: "{origin}/api/auth/social/callback"}
+    expect: [400, 403, 404, 502]
+  - id: sso-discover
+    op: POST /v1/auth/sso/discover
+    body: {email: "someone@example.com"}
+    expect: 200
+  - id: sso-start-no-connection
+    op: POST /v1/auth/sso/start
+    body: {email: "someone@example.com", redirect_uri: "{origin}/api/auth/sso/callback", code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"}
+    expect: [400, 403, 404]
+  - id: sso-token-unknown
+    op: POST /v1/auth/sso/token
+    body: {code: "api-check-{run}", redirect_uri: "{origin}/api/auth/sso/callback", code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"}
+    expect: 400
+  - id: passkey-login-begin
+    op: POST /v1/auth/webauthn/login/begin
+    body: {}
+    expect: [200, 403, 404]
+  - id: passkey-login-finish-unknown
+    op: POST /v1/auth/webauthn/login/finish
+    body: {session_id: "api-check-{run}", credential: {}}
+    expect: [400, 401, 403]
+  - id: one-tap-begin
+    op: POST /v1/auth/google/one-tap/begin
+    expect: [200, 404]
+  - id: one-tap-unknown
+    op: POST /v1/auth/google/one-tap
+    body: {credential: "api-check-{run}"}
+    expect: [400, 401, 403, 404, 422]
+
+  # ── Routes that need a session, without one ────────────────────────────
+  # (Each would ask for the password again, or enrol a factor: refused before.)
+  - id: guest-upgrade-unauthenticated
+    op: POST /v1/auth/anonymous/upgrade
+    body: {email: "nobody-{run}@example.com", password: "Api-check-{run}-unused"}
+    expect: 401
+  - id: guest-upgrade-social-unauthenticated
+    op: GET /v1/auth/anonymous/upgrade/{provider}
+    params: {provider: google}
+    expect: 401
+  - id: guest-upgrade-callback-unauthenticated
+    op: GET /v1/auth/anonymous/upgrade/{provider}/callback
+    params: {provider: google}
+    query: {code: "api-check-{run}", state: "api-check-{run}"}
+    expect: 401
+  - id: me-password-unauthenticated
+    op: POST /v1/auth/me/password
+    body: {current_password: "Api-check-{run}-unused", new_password: "Api-check-{run}-unused"}
+    expect: 401
+  - id: me-email-unauthenticated
+    op: POST /v1/auth/me/email
+    body: {email: "nobody-{run}@example.com"}
+    expect: 401
+  - id: me-mfa-disable-unauthenticated
+    op: POST /v1/auth/me/mfa/disable
+    body: {}
+    expect: 401
+  - id: me-recovery-codes-unauthenticated
+    op: POST /v1/auth/me/mfa/recovery-codes
+    body: {}
+    expect: 401
+  - id: mfa-setup-unauthenticated
+    op: POST /v1/auth/mfa/setup
+    body: {}
+    expect: 401
+  - id: mfa-verify-unauthenticated
+    op: POST /v1/auth/mfa/verify
+    body: {code: "000000"}
+    expect: 401
+  - id: mfa-phone-unauthenticated
+    op: POST /v1/auth/mfa/phone
+    body: {phone: "+15005550006", password: "Api-check-{run}-unused"}
+    expect: 401
+  - id: mfa-phone-verify-unauthenticated
+    op: POST /v1/auth/mfa/phone/verify
+    body: {code: "000000"}
+    expect: 401
+  - id: mfa-phone-remove-unauthenticated
+    op: POST /v1/auth/mfa/phone/remove
+    body: {password: "Api-check-{run}-unused"}
+    expect: 401
+  - id: passkey-register-begin-unauthenticated
+    op: POST /v1/auth/webauthn/register/begin
+    body: {}
+    expect: 401
+  - id: passkey-register-finish-unauthenticated
+    op: POST /v1/auth/webauthn/register/finish
+    body: {session_id: "api-check-{run}", credential: {}}
+    expect: 401
+
+  # ── The member's own account ───────────────────────────────────────────
+  - id: me
+    op: GET /v1/auth/me
+    auth: member_token
+    expect: 200
+    capture: {member_id: data.id}
+  - id: me-update-nothing
+    op: PATCH /v1/auth/me
+    auth: member_token
+    body: {}
+    expect: [200, 400]
+  - id: me-legal
+    op: GET /v1/auth/me/legal
+    auth: member_token
+    expect: 200
+  - id: me-legal-accept-nothing
+    op: POST /v1/auth/me/legal/accept
+    auth: member_token
+    body: {kinds: []}
+    expect: [204, 400]
+  - id: me-sessions
+    op: GET /v1/auth/me/sessions
+    auth: member_token
+    expect: 200
+  - id: me-agents
+    op: GET /v1/auth/me/agents
+    auth: member_token
+    expect: 200
+  - id: me-agent-disconnect-unknown
+    op: DELETE /v1/auth/me/agents/{id}
+    auth: member_token
+    params: {id: 00000000-0000-4000-8000-000000000000}
+    expect: [400, 404]
+  - id: identities
+    op: GET /v1/auth/identities
+    auth: member_token
+    expect: 200
+  - id: identity-link-unknown-provider
+    op: GET /v1/auth/identities/{provider}/link
+    auth: member_token
+    params: {provider: no-such-provider}
+    query: {redirect_uri: "{origin}/api/auth/link/callback"}
+    expect: [400, 404]
+  - id: identity-link-callback-unknown
+    op: GET /v1/auth/identities/{provider}/link/callback
+    auth: member_token
+    params: {provider: google}
+    query: {code: "api-check-{run}", state: "api-check-{run}", redirect_uri: "{origin}/api/auth/link/callback"}
+    expect: [400, 403, 404, 409, 502]
+  - id: identity-unlink-none
+    op: DELETE /v1/auth/identities/{provider}
+    auth: member_token
+    params: {provider: google}
+    expect: [404, 409]
+  - id: mfa-factors
+    op: GET /v1/auth/mfa/factors
+    auth: member_token
+    expect: 200
+  - id: passkeys
+    op: GET /v1/auth/webauthn/credentials
+    auth: member_token
+    expect: 200
+  - id: passkey-delete-unknown
+    op: DELETE /v1/auth/webauthn/credentials/{id}
+    auth: member_token
+    params: {id: 00000000-0000-4000-8000-000000000000}
+    expect: [400, 404]
+  - id: userinfo
+    op: GET /v1/oauth/userinfo
+    auth: member_token
+    expect: 200
+  - id: oauth-organizations
+    op: GET /v1/oauth/organizations
+    auth: member_token
+    expect: 200
+  - id: oauth-organization-check-unknown
+    op: POST /v1/oauth/organizations/{id}/check
+    auth: member_token
+    params: {id: 00000000-0000-4000-8000-000000000000}
+    body: {resource: invoices, action: approve}
+    expect: [403, 404]
+  - id: my-organizations
+    op: GET /v1/auth/me/organizations
+    auth: member_token
+    expect: 200
+
+  # ── The system: OAuth with its own client ──────────────────────────────
+  - id: token-client-credentials
+    op: POST /v1/oauth/token
+    form: {grant_type: client_credentials, client_id: "{client_id}", client_secret: "{client_secret}"}
+    expect: 200
+    capture: {system_token: access_token}
+  - id: token-unsupported-grant
+    op: POST /v1/oauth/token
+    form: {grant_type: password, client_id: "{client_id}", client_secret: "{client_secret}"}
+    expect: 400
+  - id: revoke-unknown-token
+    op: POST /v1/oauth/revoke
+    form: {token: "api-check-{run}", client_id: "{client_id}", client_secret: "{client_secret}"}
+    expect: 200
+  - id: introspect-unknown-token
+    op: POST /v1/oauth/introspect
+    form: {token: "api-check-{run}"}
+    expect: [200, 400]
+  - id: register-agent-malformed
+    op: POST /v1/oauth/register
+    body: {client_name: "api-check {run}", redirect_uris: ["not a url"]}
+    expect: 400
+  - id: authorize
+    op: GET /v1/oauth/authorize
+    query:
+      client_id: "{client_id}"
+      redirect_uri: "{origin}/api/auth/callback"
+      response_type: code
+      state: "api-check-{run}"
+      scope: openid
+      code_challenge: E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+      code_challenge_method: S256
+    expect: [302, 303]
+  - id: logout
+    op: GET /v1/oauth/logout
+    query: {client_id: "{client_id}"}
+    expect: [200, 302]
+
+  # ── Organizations, as the system manages them ──────────────────────────
+  - id: organizations
+    op: GET /v1/organizations
+    auth: system_token
+    expect: 200
+  - id: organization-create
+    op: POST /v1/organizations
+    auth: system_token
+    body: {name: "api-check {run}", kind: customer, external_id: "api-check-{run}"}
+    expect: 201
+    capture: {org_id: data.id}
+  - id: organization-create-for-the-member
+    op: POST /v1/organizations
+    auth: system_token
+    body: {name: "api-check {run} member", kind: customer}
+    expect: 201
+    capture: {member_org_id: data.id}
+  - id: organization
+    op: GET /v1/organizations/{id}
+    auth: system_token
+    params: {id: "{org_id}"}
+    expect: 200
+  - id: organization-update
+    op: PATCH /v1/organizations/{id}
+    auth: system_token
+    params: {id: "{org_id}"}
+    body: {metadata: {source: api-check}}
+    expect: 200
+  - id: organization-members
+    op: GET /v1/organizations/{id}/members
+    auth: system_token
+    params: {id: "{org_id}"}
+    expect: 200
+  - id: organization-add-member
+    op: POST /v1/organizations/{id}/members
+    auth: system_token
+    params: {id: "{org_id}"}
+    body: {user_id: "{member_id}", role: member}
+    expect: [200, 201]
+  - id: organization-add-the-member-as-owner
+    op: POST /v1/organizations/{id}/members
+    auth: system_token
+    params: {id: "{member_org_id}"}
+    body: {user_id: "{member_id}", role: owner}
+    expect: [200, 201]
+  - id: organization-memberships
+    op: GET /v1/organizations/memberships
+    auth: system_token
+    query: {user_id: "{member_id}"}
+    expect: 200
+  - id: organization-set-member
+    op: PUT /v1/organizations/{id}/members/{user_id}
+    auth: system_token
+    params: {id: "{org_id}", user_id: "{member_id}"}
+    body: {role: member}
+    expect: [200, 201]
+  - id: member-overrides
+    op: GET /v1/organizations/{id}/members/{user_id}/overrides
+    auth: system_token
+    params: {id: "{org_id}", user_id: "{member_id}"}
+    expect: 200
+  - id: member-overrides-set
+    op: PUT /v1/organizations/{id}/members/{user_id}/overrides
+    auth: system_token
+    params: {id: "{org_id}", user_id: "{member_id}"}
+    body: {overrides: []}
+    expect: 200
+  - id: member-attributes
+    op: GET /v1/organizations/{id}/members/{user_id}/attributes
+    auth: system_token
+    params: {id: "{org_id}", user_id: "{member_id}"}
+    expect: 200
+  - id: member-attributes-set
+    op: PUT /v1/organizations/{id}/members/{user_id}/attributes
+    auth: system_token
+    params: {id: "{org_id}", user_id: "{member_id}"}
+    body: {attributes: {region: north}}
+    expect: 200
+  - id: system-catalog
+    op: GET /v1/systems/{system}/catalog
+    auth: system_token
+    params: {system: "{system}"}
+    expect: 200
+  - id: system-check
+    op: POST /v1/systems/{system}/check
+    auth: system_token
+    params: {system: "{system}"}
+    body: {organization_id: "{org_id}", user_id: "{member_id}", resource: invoices, action: approve}
+    expect: 200
+  - id: invite-malformed
+    op: POST /v1/users
+    auth: system_token
+    body: {email: "not-an-address"}
+    expect: 400
+  - id: organization-remove-member
+    op: DELETE /v1/organizations/{id}/members/{user_id}
+    auth: system_token
+    params: {id: "{org_id}", user_id: "{member_id}"}
+    expect: 204
+  - id: organization-delete
+    op: DELETE /v1/organizations/{id}
+    auth: system_token
+    params: {id: "{org_id}"}
+    expect: 204
+
+  # ── The member's own organization (they own {member_org_id}) ───────────
+  - id: my-organization-members
+    op: GET /v1/auth/me/organizations/{id}/members
+    auth: member_token
+    params: {id: "{member_org_id}"}
+    expect: 200
+  - id: my-organization-roles
+    op: GET /v1/auth/me/organizations/{id}/roles
+    auth: member_token
+    params: {id: "{member_org_id}"}
+    expect: 200
+  - id: my-organization-rename
+    op: PATCH /v1/auth/me/organizations/{id}
+    auth: member_token
+    params: {id: "{member_org_id}"}
+    body: {name: "api-check {run} renamed"}
+    expect: 200
+  - id: my-organization-add-unknown-role
+    op: POST /v1/auth/me/organizations/{id}/members
+    auth: member_token
+    params: {id: "{member_org_id}"}
+    body: {email: "invitee-{run}@example.com", role: no-such-role}
+    expect: [400, 404]
+  - id: my-organization-set-role-unknown-member
+    op: PUT /v1/auth/me/organizations/{id}/members/{user_id}
+    auth: member_token
+    params: {id: "{member_org_id}", user_id: 00000000-0000-4000-8000-000000000000}
+    body: {role: member}
+    expect: [400, 404]
+  - id: my-organization-invite-unknown-member
+    op: POST /v1/auth/me/organizations/{id}/members/{user_id}/invite
+    auth: member_token
+    params: {id: "{member_org_id}", user_id: 00000000-0000-4000-8000-000000000000}
+    body: {}
+    expect: [400, 404]
+  - id: my-organization-remove-unknown-member
+    op: DELETE /v1/auth/me/organizations/{id}/members/{user_id}
+    auth: member_token
+    params: {id: "{member_org_id}", user_id: 00000000-0000-4000-8000-000000000000}
+    expect: [400, 404]
+  - id: my-organization-archive
+    op: POST /v1/auth/me/organizations/{id}/archive
+    auth: member_token
+    params: {id: "{member_org_id}"}
+    expect: 204
+  - id: my-organization-delete
+    op: DELETE /v1/auth/me/organizations/{id}
+    auth: member_token
+    params: {id: "{member_org_id}"}
+    expect: 204
+
+  # ── The owner: settings, clients, Pact, webhooks, agents, people ───────
+  - id: settings
+    op: GET /v1/settings/auth
+    auth: owner_token
+    expect: 200
+  - id: settings-unchanged
+    op: PUT /v1/settings/auth
+    auth: owner_token
+    body: {}
+    expect: 200
+  - id: oauth-clients
+    op: GET /v1/oauth/clients
+    auth: owner_token
+    expect: 200
+  - id: oauth-client-rename-same
+    op: PATCH /v1/oauth/clients/{client_id}
+    auth: owner_token
+    params: {client_id: "{client_id}"}
+    body: {name: "{system}"}
+    expect: 200
+  - id: oauth-client-theme
+    op: GET /v1/oauth/clients/{client_id}/theme
+    auth: owner_token
+    params: {client_id: "{client_id}"}
+    expect: [200, 404]
+  - id: pact-status
+    op: GET /v1/pact/status
+    auth: owner_token
+    expect: 200
+  - id: webhooks
+    op: GET /v1/webhooks
+    auth: owner_token
+    expect: 200
+  - id: webhook-create
+    op: POST /v1/webhooks
+    auth: owner_token
+    body: {url: "https://hooks.example.com/api-check-{run}", description: api-check}
+    expect: 201
+    capture: {webhook_id: data.id}
+  - id: webhook
+    op: GET /v1/webhooks/{endpoint_id}
+    auth: owner_token
+    params: {endpoint_id: "{webhook_id}"}
+    expect: 200
+  - id: webhook-pause
+    op: PATCH /v1/webhooks/{endpoint_id}
+    auth: owner_token
+    params: {endpoint_id: "{webhook_id}"}
+    body: {is_active: false}
+    expect: 200
+  - id: webhook-delete
+    op: DELETE /v1/webhooks/{endpoint_id}
+    auth: owner_token
+    params: {endpoint_id: "{webhook_id}"}
+    expect: 204
+  - id: agent-resources
+    op: GET /v1/agents/resources
+    auth: owner_token
+    expect: 200
+  - id: agent-resource-create
+    op: POST /v1/agents/resources
+    auth: owner_token
+    body: {uri: "https://mcp.example.com/api-check-{run}", name: "api-check {run}"}
+    expect: 201
+    capture: {agent_resource_id: data.id}
+  - id: agent-resource-rename
+    op: PATCH /v1/agents/resources/{id}
+    auth: owner_token
+    params: {id: "{agent_resource_id}"}
+    body: {name: "api-check {run} renamed"}
+    expect: 200
+  - id: agent-resource-secret
+    op: POST /v1/agents/resources/{id}/secret
+    auth: owner_token
+    params: {id: "{agent_resource_id}"}
+    expect: 200
+  - id: agent-resource-delete
+    op: DELETE /v1/agents/resources/{id}
+    auth: owner_token
+    params: {id: "{agent_resource_id}"}
+    expect: 204
+  - id: users-find
+    op: GET /v1/users
+    auth: owner_token
+    query: {q: "{member_email}"}
+    expect: 200
+  - id: user-delete-unknown
+    op: DELETE /v1/users/{id}
+    auth: owner_token
+    params: {id: 00000000-0000-4000-8000-000000000000}
+    expect: 404
+
+  # ── Last: the member's sessions end (the ones this run opened among them) ──
+  - id: me-sessions-end
+    op: DELETE /v1/auth/me/sessions
+    auth: member_token
+    expect: 204
