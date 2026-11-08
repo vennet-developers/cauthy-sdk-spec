@@ -20,7 +20,8 @@
 //
 // A case's allow_anonymous and allow_client_tokens (and allow_system, if a case
 // ever sets it) are passed as allowAnonymous / allowClientTokens / allowSystem;
-// an SDK that has no such option ignores them.
+// an SDK that has no such option ignores them. A case's client_id is passed as
+// clientId, the client whose people the backend signs in (rule R15).
 //
 // A case with an `issuers` list is run with issuer: [issuer, ...issuers], the
 // form jose takes for several accepted issuers. A finding on such a case reads
@@ -71,6 +72,7 @@ test('vectors against cauthy-auth verifyToken', { skip: dir ? false : 'set CAUTH
         issuer: c.config.issuers?.length ? [c.config.issuer, ...c.config.issuers] : c.config.issuer,
         allowAnonymous: c.config.allow_anonymous === true,
         allowClientTokens: c.config.allow_client_tokens === true,
+        ...(c.config.client_id === undefined ? {} : { clientId: c.config.client_id }),
         ...(c.config.allow_system === undefined ? {} : { allowSystem: c.config.allow_system === true }),
         audience: c.config.audience,
         tenantId: c.config.tenant,

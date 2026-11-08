@@ -170,6 +170,12 @@ func (v *Verifier) Verify(ctx context.Context, token string, now time.Time) (*Id
 		return nil, refuse(AnonymousToken, "the token is a guest's")
 	}
 
+	// R15 — a person's token issued through another client than the one
+	// this backend names. A token that names no client passes.
+	if v.cfg.ClientID != "" && c.azp != "" && c.azp != v.cfg.ClientID {
+		return nil, refuse(WrongClient, "azp %q", c.azp)
+	}
+
 	sec := int64(c.exp)
 	return &Identity{
 		Subject: c.sub, Tenant: c.tid, Email: c.email, EmailVerified: c.emailVerified, Roles: c.roles, Anonymous: c.anon,

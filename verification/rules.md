@@ -37,6 +37,7 @@ The keys are published at `<issuer>/.well-known/jwks.json`: every active key as 
 | `leeway` | Clock tolerance. Default 30 seconds when unset; 0 to 60 accepted, and an explicit 0 means none |
 | `allow_anonymous` | Whether a guest's token is accepted. Default `false` |
 | `allow_client_tokens` | Whether a client's own token (`token_use`, from a `client_credentials` grant) is accepted, for a backend that serves machines as well as people. Default `false` |
+| `client_id` | Optional: the client the backend signs people in through. When set, a person's token issued through another client is refused (R15). In contract mode it is the link's sign-in client (see [`contract/pact.md`](../contract/pact.md)). Default: none, and `azp` is not checked |
 
 A configuration that breaks a rule is an error when the verifier is built, before it verifies anything.
 
@@ -60,6 +61,7 @@ The rules run in this order, and a token is refused at the first one it breaks, 
 | R12 | `tid` equals the configured tenant | `wrong_tenant` |
 | R13 | No `sys` claim, whatever its value, `null` and `false` included: its presence is the mark. A system's own token never stands for a person. Then no `token_use` claim, whatever its value, unless the backend allows client tokens (`allow_client_tokens`): a client's own token stands for a machine, not a person. A token with both is refused as a system's | `system_token`, `client_token` |
 | R14 | `anon` is not `true`, unless the backend allows guests | `anonymous_token` |
+| R15 | When the backend names its client (`client_id`) and the token carries `azp`, `azp` equals it, byte for byte. A token with no `azp` was issued with no client named, and passes | `wrong_client` |
 
 ## Keys and refetching
 
@@ -104,6 +106,7 @@ The list is closed: a verifier reports one of these and no other, and the vector
 | `system_token` | R13 | A system's own token |
 | `client_token` | R13 | A client's own token where client tokens are not allowed |
 | `anonymous_token` | R14 | A guest's token where guests are not allowed |
+| `wrong_client` | R15 | A person's token issued through another client than the one the backend names |
 
 ## Vectors
 
@@ -111,7 +114,7 @@ The list is closed: a verifier reports one of these and no other, and the vector
 | --- | --- |
 | `vectors/keys/*.jwk.json` | The test keys, as private JWKs. **Test only**: they are public on purpose and sign nothing real |
 | `vectors/jwks.json` | The set a verifier loads: the current key, the previous key, a 1024-bit key, and a key published with `use: enc` |
-| `vectors/tokens.json` | Every case: `name`, `rule`, `description`, `token`, `now` (seconds since the epoch), `config` (`issuer`, `audience`, `tenant`, and `issuers`, `allow_anonymous` and `allow_client_tokens` when set), `expect` (`valid` or `invalid`) and, for an invalid one, `reason` |
+| `vectors/tokens.json` | Every case: `name`, `rule`, `description`, `token`, `now` (seconds since the epoch), `config` (`issuer`, `audience`, `tenant`, and `issuers`, `allow_anonymous`, `allow_client_tokens` and `client_id` when set), `expect` (`valid` or `invalid`) and, for an invalid one, `reason` |
 
 Every case is built to be accepted, or to be refused by one rule only, so the reason is the same whatever order a verifier runs its checks in. The vectors assume the default leeway (30 seconds) and the 8192-byte limit; a case at a boundary says so in its description.
 

@@ -7,7 +7,7 @@ Pact is Vennet's contract network; `core-contracts` holds the manifests and link
 | From the graph | Used for |
 | --- | --- |
 | The provider system `cauthy` and its `url` | The issuer: where tokens come from and where the API is |
-| The consumer's `links` edge to `cauthy` that has a `sign_in` block | The sign-in client id (`sign_in.client_id`, else `pact.<link id>`), the tenant, the redirect URIs, `sign_in.require_system_proof`, `sign_in.persistent_sessions` |
+| The consumer's `links` edge to `cauthy` that has a `sign_in` block | The sign-in client id (`sign_in.client_id`, else `pact.<link id>`), which is also the verifier's `client_id` (a person's token issued through another client is refused with `wrong_client`, rule R15 of [`verification/rules.md`](../verification/rules.md)), the tenant, the redirect URIs, `sign_in.require_system_proof`, `sign_in.persistent_sessions` |
 | The link's `service` block | The confidential client `pact.<link id>.service` the application acts as, and its `jwks_url` |
 | The consumer system's `jwks_url` | The path where the application publishes its own public key, when the `service` block names none |
 | The consumer system's `events_url` | Where Cauthy sends events, when the system names one |

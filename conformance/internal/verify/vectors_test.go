@@ -31,6 +31,7 @@ func TestVectors(t *testing.T) {
 			v, err := verify.New(verify.Config{
 				Issuer: c.Config.Issuer, Issuers: c.Config.Issuers, Audience: c.Config.Audience, Tenant: c.Config.Tenant,
 				AllowAnonymous: c.Config.AllowAnonymous, AllowClientTokens: c.Config.AllowClientTokens,
+				ClientID: c.Config.ClientID,
 			}, keys)
 			if err != nil {
 				t.Fatal(err)

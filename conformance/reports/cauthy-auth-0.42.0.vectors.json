@@ -1,7 +1,7 @@
 {
   "sdk": "cauthy-auth",
   "version": "0.42.0",
-  "vectors": 104,
+  "vectors": 108,
   "findings": [
     {
       "name": "valid/exp-inside-leeway",
@@ -335,6 +335,22 @@
       "got": "valid",
       "detail": "",
       "resolution": "fixed in cauthy-auth 0.43 and in @cauthyhq/node 1.0"
+    },
+    {
+      "name": "client/other-azp",
+      "rule": "R15",
+      "expect": "invalid",
+      "reason": "wrong_client",
+      "got": "valid",
+      "detail": ""
+    },
+    {
+      "name": "client/azp-case",
+      "rule": "R15",
+      "expect": "invalid",
+      "reason": "wrong_client",
+      "got": "valid",
+      "detail": ""
     }
   ]
 }

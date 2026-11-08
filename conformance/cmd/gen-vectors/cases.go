@@ -139,6 +139,16 @@ func Cases(k Keys) []vectors.Case {
 		}(),
 		valid("valid/azp", "R8", "A person's token issued through a client: azp names it", signed(with(person(), "azp", "acme-web"))),
 		func() vectors.Case {
+			c := valid("valid/azp-own-client", "R15", "azp is the client the backend names", signed(with(person(), "azp", "acme-web")))
+			c.Config.ClientID = "acme-web"
+			return c
+		}(),
+		func() vectors.Case {
+			c := valid("valid/azp-absent-client-named", "R15", "No azp: the token was issued with no client named, and passes where the backend names one", good)
+			c.Config.ClientID = "acme-web"
+			return c
+		}(),
+		func() vectors.Case {
 			c := valid("valid/second-issuer", "R9", "iss is the workspace's custom domain, listed in issuers beside the configured issuer", customDomain)
 			c.Config.Issuers = []string{CustomIssuer}
 			return c
@@ -255,6 +265,17 @@ func Cases(k Keys) []vectors.Case {
 		}(),
 
 		invalid("anonymous/guest", "R14", "A guest's token where the backend expects a person", signed(guest), verify.AnonymousToken),
+
+		func() vectors.Case {
+			c := invalid("client/other-azp", "R15", "A person's token issued through another client than the one the backend names", signed(with(person(), "azp", "acme-admin")), verify.WrongClient)
+			c.Config.ClientID = "acme-web"
+			return c
+		}(),
+		func() vectors.Case {
+			c := invalid("client/azp-case", "R15", "azp is the named client in another case: compared byte for byte", signed(with(person(), "azp", "Acme-Web")), verify.WrongClient)
+			c.Config.ClientID = "acme-web"
+			return c
+		}(),
 	}
 	return cases
 }
