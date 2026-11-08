@@ -16,7 +16,7 @@ A backend SDK serves these routes under one prefix (`/api/auth` by default). A c
 
 ## Levels
 
-`basic` is the protocol as served today; `strict` adds four requirements: `Cauthy-Protocol: 1`, `X-Cauthy-Request` on mutations, `next` on sign-in answers, and `no-store` on every answer, the plain-text ones included. A backend declares which it meets. See the table at the end.
+`basic` is the protocol as served today; `strict` adds four requirements: `Cauthy-Protocol: 1`, `X-Cauthy-Request` on mutations, `next` on sign-in answers, and `no-store` on every answer, the plain-text ones included. A backend declares which it meets. See the table at the end. `switches` is `strict` plus the dashboard switches: with a Cauthy and an admin token, the runner changes the tenant's sign-in settings and checks the backend follows with no restart. A backend that needs new code, or a restart, for a dashboard switch does not pass it.
 
 ## Cookies
 
@@ -174,3 +174,4 @@ The table is `routes.yaml`; `openapi/auth-bff.yaml` is generated from it. Groups
 | csrf | basic | `403 cross_site` on a foreign Origin and on `Sec-Fetch-Site: cross-site` |
 | table | basic | Every route in the table answers its method with something other than 404 or 405; `/methods` and `/session` carry their fields |
 | strict | strict | `Cauthy-Protocol: 1`; `X-Cauthy-Request` required; `next` on sign-in answers; no-store on every answer, plain-text ones included; the check samples the plain-text 404 and 405 (the hosted `/callback` 400 and `/refresh` 503 need a hosted deployment and are not sampled) |
+| switches | switches | With `--cauthy`: sign-ups closed then opened, passwords off then on, sign-in links on then off, passkeys off, address confirmation on then off, the backend client's long sessions on then off; `/methods`, `/sign-in/email`, `/sign-up/email` and the session cookie follow each, with no restart, within `--switch-wait`. The tenant is put back after each check |

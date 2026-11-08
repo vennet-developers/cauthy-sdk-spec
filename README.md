@@ -39,6 +39,28 @@ The password is read only from the `CONFORMANCE_PASSWORD` environment variable, 
 
 Exit codes: `0` every check of the level passed and none was skipped; `1` a check failed; `2` usage or configuration error; `3` nothing failed but a check at or below the level was skipped (not a certification). A check that does not apply to the backend (for example the persistent-session check for the setting the tenant does not have) is reported `n/a` and does not make a run incomplete.
 
+## Dashboard switches (level `switches`)
+
+With a Cauthy and a token of the tenant's admin, the runner also changes the tenant's sign-in
+settings, as an admin would in the dashboard, and checks the backend follows with no restart:
+sign-ups closed then opened, passwords off then on, sign-in links on then off, passkeys off,
+address confirmation on then off, and the backend client's long sessions on then off. It puts
+each setting back as it found it, and deletes the accounts it signed up.
+
+    CONFORMANCE_PASSWORD=… CAUTHY_ADMIN_TOKEN=… bin/cauthy-conformance \
+      --target http://localhost:3999/api/auth --origin http://localhost:3999 --email member@example.com \
+      --level switches --cauthy http://localhost:8080 --tenant acme --client-id <the backend's client id>
+
+- The token needs `settings:manage`, `oauth_clients:manage`, `users:manage` and `users:delete`.
+  It is read from `CAUTHY_ADMIN_TOKEN` (another variable with `--admin-token-env`), never from a flag.
+- Without `--cauthy` the switch checks skip, and a run at `basic` or `strict` is still complete;
+  `--level switches` without `--cauthy` is a usage error. At `basic` or `strict` with `--cauthy`,
+  a switch the backend does not follow is reported `advisory`.
+- `--switch-wait` (default `10s`) is how long the backend has to follow a switch.
+- A sign-in link is offered only by an application that names its sign-in page.
+- A run with `--cauthy` signs in at most six times.
+- Point it at a tenant made for testing: while it runs, the tenant's sign-in settings change.
+
 ## Run the token vectors
 
 `verification/rules.md` says what a backend checks on a Cauthy access token; `vectors/tokens.json` holds signed tokens and the verdict every verifier must reach, against the keys in `vectors/jwks.json`.
