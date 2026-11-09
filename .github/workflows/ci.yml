@@ -30,6 +30,10 @@ jobs:
           go run ./cmd/gen-vectors ../vectors/keys "$RUNNER_TEMP"
           diff -u ../vectors/jwks.json "$RUNNER_TEMP/jwks.json"
           diff -u ../vectors/tokens.json "$RUNNER_TEMP/tokens.json"
+      - name: vectors/cauthy-key.json is generated from the reference
+        run: |
+          go run ./cmd/gen-key-vectors ../vectors
+          git diff --exit-code ../vectors/cauthy-key.json
       - name: the route table has 75 routes
         run: test "$(grep -c '^  - { id:' ../protocol/routes.yaml)" = 75
   vectors-node:
@@ -46,6 +50,8 @@ jobs:
             node --test vectors/verify.test.mjs
       - name: the committed report matches the run
         run: diff -u conformance/reports/cauthy-auth-0.42.0.vectors.json "$RUNNER_TEMP/findings.json"
+      - name: CAUTHY_KEY vectors agree with WebCrypto
+        run: node --test vectors/cauthy-key.test.mjs
   openapi:
     runs-on: ubuntu-latest
     steps:

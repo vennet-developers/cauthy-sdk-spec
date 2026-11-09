@@ -122,6 +122,12 @@ func composeUnchecked(issuer, clientID, secret string) string {
 	return body + "." + checksum(body)
 }
 
+// ComposeUnchecked writes a key with a correct checksum around any values.
+// For vectors and tests only: a real key is made with Compose.
+func ComposeUnchecked(issuer, clientID, secret string) string {
+	return composeUnchecked(issuer, clientID, secret)
+}
+
 func checksum(body string) string {
 	sum := sha256.Sum256([]byte(body))
 	return b64.EncodeToString(sum[:6])
