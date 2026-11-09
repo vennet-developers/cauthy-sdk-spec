@@ -30,7 +30,7 @@ padding, characters outside the alphabet and non-zero unused bits.
 | 2 | The text before the first `.` must be `cauthy1`. Another `cauthy<digits>` is a newer version | `key_version` |
 | 3 | Exactly five `.`-separated parts, none empty | `key_format` |
 | 4 | `CHECK` equals the recomputed one (constant-time compare) | `key_checksum` |
-| 5 | `ISSUER` decodes to an ASCII origin: scheme `https`, or `http` with host `localhost`, `127.0.0.1` or `[::1]`; lowercase host; optional port, never the scheme's default (`:443`, `:80`); no userinfo, path (not even `/`), query or fragment. Written exactly as a WHATWG URL serializes its origin | `key_issuer` |
+| 5 | `ISSUER` decodes to an ASCII origin: scheme `https`, or `http` with host `localhost`, `127.0.0.1` or `[::1]`; lowercase host; optional port, never the scheme's default (`:443`, `:80`); no userinfo, path (not even `/`), query or fragment. Written exactly as a WHATWG URL serializes its origin: a port is decimal, without leading zeros, at most 65535; an IPv4 address is dotted decimal (`127.1`, `0x7f.0.0.1` refused); an IPv6 address is in RFC 5952 form inside brackets, never IPv4-mapped | `key_issuer` |
 | 6 | `CLIENT` decodes to 1–128 bytes of `[A-Za-z0-9._-]` | `key_client` |
 | 7 | `SECRET` is 43 characters and decodes to 32 bytes | `key_secret` |
 
