@@ -1610,6 +1610,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/connect/self": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who the calling application is (CAUTHY_KEY)
+         * @description Asked by an application with its own token (the `client_credentials` token it gets with its `CAUTHY_KEY` assertion, the same token it sends as `X-Cauthy-System-Token`): its workspace, its system, its client and the client people sign in through, the origins of its registered return addresses (development first), the return path, the key it last proved itself with, and its contract when a link of the contracts graph names it. `X-Tenant-Key` is optional with a system's token. Cacheable for five minutes (`Cache-Control: private, max-age=300`) and revalidated with its `ETag` (`If-None-Match` answers 304). Nothing in it is secret.
+         */
+        get: operations["getConnectSelf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pact/status": {
         parameters: {
             query?: never;
@@ -1688,6 +1708,70 @@ export interface paths {
          * @description Changes the name, roles, scopes or the application's address. A field left out is left as it is. Requires `oauth_clients:manage`.
          */
         patch: operations["updateOAuthClient"];
+        trace?: never;
+    };
+    "/v1/oauth/clients/{client_id}/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a client's keys (CAUTHY_KEY)
+         * @description The public keys the client authenticates with (`private_key_jwt`, `EdDSA`), newest first: the current one, the previous one of a rotation until it retires, and the revoked ones. Never more than each key's `kid`. Requires `oauth_clients:manage`.
+         */
+        get: operations["listOAuthClientKeys"];
+        put?: never;
+        /**
+         * Register a client's key (a new key, or a rotation)
+         * @description Registers the public half of a `CAUTHY_KEY` made in the browser as the client's current key; from then on the client may authenticate with it, and needs no secret. Every key that was active keeps working for `keep_previous` (24 hours by default, 7 days, or `none`: refused at once). Cauthy computes the `kid` (RFC 7638) and refuses a key another client of the workspace holds. Audited as `client.key.added`. Requires `oauth_clients:manage`.
+         */
+        post: operations["addOAuthClientKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/oauth/clients/{client_id}/keys/{kid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a client's key
+         * @description The key is refused from now on. Revoking the last active key is allowed: `active_keys` 0 says the application can no longer sign in until it gets a new key. Audited as `client.key.revoked`. Requires `oauth_clients:manage`.
+         */
+        delete: operations["revokeOAuthClientKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/oauth/clients/{client_id}/secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a client's secret
+         * @description Removes the secret (and a rotation's previous one) of a client that has an active key: the last step of moving an application from its variables to `CAUTHY_KEY`. Audited as `client.secret.removed`. Requires `oauth_clients:manage`.
+         */
+        delete: operations["removeOAuthClientSecret"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/oauth/clients/{client_id}/theme": {
@@ -1841,7 +1925,7 @@ export interface paths {
         put?: never;
         /**
          * Token endpoint
-         * @description Grants: `authorization_code` (with `code_verifier` for PKCE), `refresh_token` (rotating: the answer carries the next refresh token), `client_credentials` (service clients; with a secret or a `private_key_jwt` assertion), and token exchange (`urn:ietf:params:oauth:grant-type:token-exchange`, RFC 8693) for a workspace server's client. Client authentication: `client_secret_post`, `client_secret_basic`, `private_key_jwt`, or none for public clients and AI agents. The workspace is the client's own; X-Tenant-Key is optional.
+         * @description Grants: `authorization_code` (with `code_verifier` for PKCE), `refresh_token` (rotating: the answer carries the next refresh token), `client_credentials` (service clients; with a secret or a `private_key_jwt` assertion), and token exchange (`urn:ietf:params:oauth:grant-type:token-exchange`, RFC 8693) for a workspace server's client. Client authentication: `client_secret_post`, `client_secret_basic`, `private_key_jwt`, or none for public clients and AI agents. `private_key_jwt` takes RS256 (keys the client publishes at its `jwks_uri`) or EdDSA (a key registered on the client: CAUTHY_KEY). A client with a registered key and no secret is confidential: every grant it uses, and `/v1/oauth/revoke`, need its assertion. The workspace is the client's own; X-Tenant-Key is optional.
          *
          *     Every error comes as RFC 6749 §5.2 `{error, error_description}` with `Cache-Control: no-store`, never in Cauthy's error envelope. An `invalid_client` for a client that sent HTTP Basic carries `WWW-Authenticate: Basic`.
          */
@@ -2657,6 +2741,92 @@ export interface components {
             audit_retention_days?: number;
             consent_purposes?: components["schemas"]["WorkspaceConsentPurpose"][];
         };
+        /** @description A client's registered key (CAUTHY_KEY). Only its kid is ever shown. */
+        ClientKey: {
+            /** @description RFC 7638 thumbprint of the public key. */
+            kid: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description The previous key of a rotation is accepted until then.
+             */
+            retires_at?: string | null;
+            /** Format: date-time */
+            revoked_at?: string | null;
+            /** Format: date-time */
+            last_used_at?: string | null;
+            /** @description The key the application should sign with. */
+            current: boolean;
+        };
+        AddClientKeyRequest: {
+            /** @description The public half of the new `CAUTHY_KEY`, as an object or as a JSON string. */
+            public_jwk: components["schemas"]["PublicJWK"] | string;
+            /**
+             * @description How long the keys it replaces keep working. Default `24h`.
+             * @enum {string}
+             */
+            keep_previous?: "24h" | "7d" | "none";
+        };
+        AddClientKeyResponse: {
+            kid?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** @description The keys that were active before, as they stand now. */
+            previous?: {
+                kid?: string;
+                /** Format: date-time */
+                retires_at?: string | null;
+                /** Format: date-time */
+                revoked_at?: string | null;
+            }[];
+        };
+        /** @description An Ed25519 public key (RFC 8037). `kid`, `alg` and `use` are ignored: Cauthy computes the `kid` itself (RFC 7638 thumbprint). A private member (`d`…) or any other member is refused. */
+        PublicJWK: {
+            /** @enum {string} */
+            kty: "OKP";
+            /** @enum {string} */
+            crv: "Ed25519";
+            /** @description The 32-byte public key, base64url without padding. */
+            x: string;
+        };
+        /** @description Who an application is, as Cauthy holds it (CAUTHY_KEY). */
+        ConnectSelf: {
+            /** @description The issuer of the tokens the application verifies. */
+            issuer: string;
+            /** @description The audience of those tokens. */
+            audience: string;
+            tenant: {
+                /** Format: uuid */
+                id?: string;
+                slug?: string;
+            };
+            system: string;
+            /** @description The client the key authenticates. */
+            client_id: string;
+            /** @description The client people sign in through (`pact.<link>` with a contract; else `client_id`). */
+            sign_in_client_id: string;
+            /** @description The origins of the sign-in client's return addresses, in registration order. */
+            app_urls: string[];
+            /** @description The path of its first return address; `/api/auth/callback` by default. */
+            callback_path: string;
+            /** @description The key the application last signed an assertion with. */
+            key?: {
+                kid?: string;
+                /** Format: date-time */
+                retires_at?: string | null;
+            } | null;
+            /** @description The application's contract, when a link of the contracts graph names it. */
+            contract?: {
+                link?: string;
+                /** @enum {string} */
+                system_proof?: "off" | "auto" | "required";
+                require_verified_email?: boolean;
+                in_step?: boolean;
+                /** Format: date-time */
+                checked_at?: string | null;
+            } | null;
+        };
         /** @description How one contracted system stands against its contract, checked now. */
         PactStatus: {
             system: string;
@@ -2677,6 +2847,17 @@ export interface components {
              * @description When the daily reconciliation last checked this system; null before the first.
              */
             reconciled_at: string | null;
+            keys?: components["schemas"]["PactKeys"];
+        };
+        /** @description The CAUTHY_KEY of the system's service client: the kids registered on it and the EdDSA kids published at its jwks_url (the key set last read). Absent while the client has no registered key (RS256 keys only). A kid on one side only is also a `key` item of `missing` or `outside`. */
+        PactKeys: {
+            registered?: string[];
+            published?: string[];
+            /** @description Registered, not published, so the application is not deployed with the key. */
+            missing?: string[];
+            /** @description Published, not registered. */
+            outside?: string[];
+            matches?: boolean;
         };
         PactContract: {
             clients: components["schemas"]["PactContractClient"][];
@@ -2729,7 +2910,7 @@ export interface components {
         };
         /** @description One difference between the contract and what Cauthy holds. */
         PactItem: {
-            /** @description What differs: client, redirect_uri, grant_type, role, organization, require_system_proof, system_proof, system_proof_required_at, require_verified_email, persistent_sessions or jwks_url. */
+            /** @description What differs: client, redirect_uri, grant_type, role, organization, require_system_proof, system_proof, system_proof_required_at, require_verified_email, persistent_sessions, jwks_url or key. */
             kind: string;
             /** @description The client it is on, when it is on one. */
             client_id?: string;
@@ -8478,6 +8659,71 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    getConnectSelf: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional with a system's own token, which names its workspace. */
+                "X-Tenant-Key"?: string;
+                /** @description The `ETag` of the last answer. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Who the application is. */
+            200: {
+                headers: {
+                    /** @description Strong validator of the answer. */
+                    ETag?: string;
+                    /** @description `private, max-age=300`. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ConnectSelf"];
+                    };
+                };
+            };
+            /** @description Unchanged since the `ETag` sent in `If-None-Match`. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthorized`: no token, or an invalid one. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `not_a_system_token`: a person's token; `outside_system_scope`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `client_inactive`: the application's client is gone or turned off. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getPactStatus: {
         parameters: {
             query?: {
@@ -8743,6 +8989,278 @@ export interface operations {
             };
             /** @description Unexpected error. */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listOAuthClientKeys: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Tenant slug. Identifies the data isolation context. */
+                "X-Tenant-Key": components["parameters"]["TenantKey"];
+            };
+            path: {
+                /** @description The client's id. */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The client's keys. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ClientKey"][];
+                    };
+                };
+            };
+            /** @description `unauthorized`: missing or invalid token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `forbidden`: lacks `oauth_clients:manage`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such client. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `from_contract`: a contract's sign-in client; keys go on its service client. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    addOAuthClientKey: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Tenant slug. Identifies the data isolation context. */
+                "X-Tenant-Key": components["parameters"]["TenantKey"];
+            };
+            path: {
+                /** @description The client's id. */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddClientKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description The key, and the keys it replaced as they stand now. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AddClientKeyResponse"];
+                    };
+                };
+            };
+            /** @description `bad_request`; `invalid_public_key` (not an Ed25519 public key, or it holds a private member); `invalid_keep_previous`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `unauthorized`: missing or invalid token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `forbidden`: lacks `oauth_clients:manage`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such client. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `key_in_use` (the key is already an application's of the workspace); `from_contract` (a contract's sign-in client). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    revokeOAuthClientKey: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Tenant slug. Identifies the data isolation context. */
+                "X-Tenant-Key": components["parameters"]["TenantKey"];
+            };
+            path: {
+                /** @description The client's id. */
+                client_id: string;
+                /** @description The key's `kid`. */
+                kid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The key revoked, and how many stay active. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            kid?: string;
+                            /** Format: date-time */
+                            revoked_at?: string;
+                            active_keys?: number;
+                        };
+                    };
+                };
+            };
+            /** @description `unauthorized`: missing or invalid token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `forbidden`: lacks `oauth_clients:manage`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `key_not_found` (no such key, or already revoked); no such client. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `from_contract`: a contract's sign-in client. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    removeOAuthClientSecret: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Tenant slug. Identifies the data isolation context. */
+                "X-Tenant-Key": components["parameters"]["TenantKey"];
+            };
+            path: {
+                /** @description The client's id. */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The secret is gone; the client authenticates only with its keys. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthorized`: missing or invalid token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `forbidden`: lacks `oauth_clients:manage`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such client. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description `no_key`: register a key first, since removing the secret would lock the application out; `from_contract`. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9097,6 +9615,10 @@ export interface operations {
                     client_id?: string;
                     /** @description The client's secret, for a confidential client. May come in HTTP Basic instead. */
                     client_secret?: string;
+                    /** @description `urn:ietf:params:oauth:client-assertion-type:jwt-bearer` for private_key_jwt (RFC 7523): how a client with a registered key (CAUTHY_KEY) authenticates here. */
+                    client_assertion_type?: string;
+                    /** @description The signed JWT that authenticates the client (`aud` is the token endpoint). */
+                    client_assertion?: string;
                 };
             };
         };

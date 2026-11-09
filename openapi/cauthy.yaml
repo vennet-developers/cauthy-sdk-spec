@@ -59,6 +59,8 @@ tags:
       **Login flow (every login):** `POST /v1/auth/login` → *(if `mfa_required: true`)* → `POST /v1/auth/mfa/challenge`
   - name: Settings
     description: Workspace sign-in settings, phone, passkeys and custom domain. Require `settings:manage`.
+  - name: Connect
+    description: Connecting a client system in one call, and its progress.
   - name: Pact
     description: How the workspace's contracted systems stand against their contracts (the Pact graph).
   - name: Users
@@ -4409,6 +4411,70 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /v1/connect/self:
+    get:
+      tags:
+        - Connect
+      summary: Who the calling application is (CAUTHY_KEY)
+      description: 'Asked by an application with its own token (the `client_credentials` token it gets with its `CAUTHY_KEY` assertion, the same token it sends as `X-Cauthy-System-Token`): its workspace, its system, its client and the client people sign in through, the origins of its registered return addresses (development first), the return path, the key it last proved itself with, and its contract when a link of the contracts graph names it. `X-Tenant-Key` is optional with a system''s token. Cacheable for five minutes (`Cache-Control: private, max-age=300`) and revalidated with its `ETag` (`If-None-Match` answers 304). Nothing in it is secret.'
+      operationId: getConnectSelf
+      x-cauthy-flow: false
+      security:
+        - SystemToken: []
+      parameters:
+        - name: X-Tenant-Key
+          in: header
+          required: false
+          description: Optional with a system's own token, which names its workspace.
+          schema:
+            type: string
+        - name: If-None-Match
+          in: header
+          required: false
+          description: The `ETag` of the last answer.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Who the application is.
+          headers:
+            ETag:
+              description: Strong validator of the answer.
+              schema:
+                type: string
+            Cache-Control:
+              description: '`private, max-age=300`.'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ConnectSelf'
+        '304':
+          description: Unchanged since the `ETag` sent in `If-None-Match`.
+        '401':
+          description: "`unauthorized`: no token, or an invalid one."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: "`not_a_system_token`: a person's token; `outside_system_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '410':
+          description: "`client_inactive`: the application's client is gone or turned off."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /v1/pact/status:
     get:
       tags:
@@ -4724,6 +4790,244 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '500':
           description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /v1/oauth/clients/{client_id}/keys:
+    get:
+      tags:
+        - OAuthClients
+      summary: List a client's keys (CAUTHY_KEY)
+      operationId: listOAuthClientKeys
+      x-cauthy-permission: oauth_clients:manage
+      x-cauthy-flow: false
+      description: 'The public keys the client authenticates with (`private_key_jwt`, `EdDSA`), newest first: the current one, the previous one of a rotation until it retires, and the revoked ones. Never more than each key''s `kid`. Requires `oauth_clients:manage`.'
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantKey'
+        - name: client_id
+          in: path
+          required: true
+          description: The client's id.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The client's keys.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClientKey'
+        '404':
+          description: 'No such client.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`from_contract`: a contract''s sign-in client; keys go on its service client.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: '`unauthorized`: missing or invalid token.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: '`forbidden`: lacks `oauth_clients:manage`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      tags:
+        - OAuthClients
+      summary: Register a client's key (a new key, or a rotation)
+      operationId: addOAuthClientKey
+      x-cauthy-permission: oauth_clients:manage
+      x-cauthy-flow: false
+      description: 'Registers the public half of a `CAUTHY_KEY` made in the browser as the client''s current key; from then on the client may authenticate with it, and needs no secret. Every key that was active keeps working for `keep_previous` (24 hours by default, 7 days, or `none`: refused at once). Cauthy computes the `kid` (RFC 7638) and refuses a key another client of the workspace holds. Audited as `client.key.added`. Requires `oauth_clients:manage`.'
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantKey'
+        - name: client_id
+          in: path
+          required: true
+          description: The client's id.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddClientKeyRequest'
+      responses:
+        '201':
+          description: The key, and the keys it replaced as they stand now.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AddClientKeyResponse'
+        '400':
+          description: '`bad_request`; `invalid_public_key` (not an Ed25519 public key, or it holds a private member); `invalid_keep_previous`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: 'No such client.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`key_in_use` (the key is already an application''s of the workspace); `from_contract` (a contract''s sign-in client).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: '`unauthorized`: missing or invalid token.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: '`forbidden`: lacks `oauth_clients:manage`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /v1/oauth/clients/{client_id}/keys/{kid}:
+    delete:
+      tags:
+        - OAuthClients
+      summary: Revoke a client's key
+      operationId: revokeOAuthClientKey
+      x-cauthy-permission: oauth_clients:manage
+      x-cauthy-flow: false
+      description: 'The key is refused from now on. Revoking the last active key is allowed: `active_keys` 0 says the application can no longer sign in until it gets a new key. Audited as `client.key.revoked`. Requires `oauth_clients:manage`.'
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantKey'
+        - name: client_id
+          in: path
+          required: true
+          description: The client's id.
+          schema:
+            type: string
+        - name: kid
+          in: path
+          required: true
+          description: The key's `kid`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The key revoked, and how many stay active.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      kid:
+                        type: string
+                      revoked_at:
+                        type: string
+                        format: date-time
+                      active_keys:
+                        type: integer
+        '404':
+          description: '`key_not_found` (no such key, or already revoked); no such client.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`from_contract`: a contract''s sign-in client.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: '`unauthorized`: missing or invalid token.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: '`forbidden`: lacks `oauth_clients:manage`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /v1/oauth/clients/{client_id}/secret:
+    delete:
+      tags:
+        - OAuthClients
+      summary: Remove a client's secret
+      operationId: removeOAuthClientSecret
+      x-cauthy-permission: oauth_clients:manage
+      x-cauthy-flow: false
+      description: 'Removes the secret (and a rotation''s previous one) of a client that has an active key: the last step of moving an application from its variables to `CAUTHY_KEY`. Audited as `client.secret.removed`. Requires `oauth_clients:manage`.'
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantKey'
+        - name: client_id
+          in: path
+          required: true
+          description: The client's id.
+          schema:
+            type: string
+      responses:
+        '204':
+          description: The secret is gone; the client authenticates only with its keys.
+        '404':
+          description: 'No such client.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`no_key`: register a key first, since removing the secret would lock the application out; `from_contract`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: '`unauthorized`: missing or invalid token.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: '`forbidden`: lacks `oauth_clients:manage`.'
           content:
             application/json:
               schema:
@@ -5076,6 +5380,12 @@ paths:
                 client_secret:
                   type: string
                   description: The client's secret, for a confidential client. May come in HTTP Basic instead.
+                client_assertion_type:
+                  type: string
+                  description: '`urn:ietf:params:oauth:client-assertion-type:jwt-bearer` for private_key_jwt (RFC 7523): how a client with a registered key (CAUTHY_KEY) authenticates here.'
+                client_assertion:
+                  type: string
+                  description: The signed JWT that authenticates the client (`aud` is the token endpoint).
       responses:
         '200':
           description: Always `{}` once the client is authenticated, whether or not the token was live (RFC 7009).
@@ -5103,7 +5413,7 @@ paths:
       operationId: oauthToken
       x-cauthy-flow: false
       description: |-
-        Grants: `authorization_code` (with `code_verifier` for PKCE), `refresh_token` (rotating: the answer carries the next refresh token), `client_credentials` (service clients; with a secret or a `private_key_jwt` assertion), and token exchange (`urn:ietf:params:oauth:grant-type:token-exchange`, RFC 8693) for a workspace server's client. Client authentication: `client_secret_post`, `client_secret_basic`, `private_key_jwt`, or none for public clients and AI agents. The workspace is the client's own; X-Tenant-Key is optional.
+        Grants: `authorization_code` (with `code_verifier` for PKCE), `refresh_token` (rotating: the answer carries the next refresh token), `client_credentials` (service clients; with a secret or a `private_key_jwt` assertion), and token exchange (`urn:ietf:params:oauth:grant-type:token-exchange`, RFC 8693) for a workspace server's client. Client authentication: `client_secret_post`, `client_secret_basic`, `private_key_jwt`, or none for public clients and AI agents. `private_key_jwt` takes RS256 (keys the client publishes at its `jwks_uri`) or EdDSA (a key registered on the client: CAUTHY_KEY). A client with a registered key and no secret is confidential: every grant it uses, and `/v1/oauth/revoke`, need its assertion. The workspace is the client's own; X-Tenant-Key is optional.
 
         Every error comes as RFC 6749 §5.2 `{error, error_description}` with `Cache-Control: no-store`, never in Cauthy's error envelope. An `invalid_client` for a client that sent HTTP Basic carries `WWW-Authenticate: Basic`.
       security:
@@ -7755,6 +8065,171 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkspaceConsentPurpose'
+    ClientKey:
+      type: object
+      description: A client's registered key (CAUTHY_KEY). Only its kid is ever shown.
+      required:
+        - kid
+        - created_at
+        - current
+      properties:
+        kid:
+          type: string
+          description: RFC 7638 thumbprint of the public key.
+        created_at:
+          type: string
+          format: date-time
+        retires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: The previous key of a rotation is accepted until then.
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        current:
+          type: boolean
+          description: The key the application should sign with.
+    AddClientKeyRequest:
+      type: object
+      required:
+        - public_jwk
+      properties:
+        public_jwk:
+          description: The public half of the new `CAUTHY_KEY`, as an object or as a JSON string.
+          oneOf:
+            - $ref: '#/components/schemas/PublicJWK'
+            - type: string
+        keep_previous:
+          type: string
+          enum:
+            - 24h
+            - 7d
+            - none
+          description: How long the keys it replaces keep working. Default `24h`.
+    AddClientKeyResponse:
+      type: object
+      properties:
+        kid:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        previous:
+          type: array
+          description: The keys that were active before, as they stand now.
+          items:
+            type: object
+            properties:
+              kid:
+                type: string
+              retires_at:
+                type: string
+                format: date-time
+                nullable: true
+              revoked_at:
+                type: string
+                format: date-time
+                nullable: true
+    PublicJWK:
+      type: object
+      description: 'An Ed25519 public key (RFC 8037). `kid`, `alg` and `use` are ignored: Cauthy computes the `kid` itself (RFC 7638 thumbprint). A private member (`d`…) or any other member is refused.'
+      required:
+        - kty
+        - crv
+        - x
+      properties:
+        kty:
+          type: string
+          enum:
+            - OKP
+        crv:
+          type: string
+          enum:
+            - Ed25519
+        x:
+          type: string
+          description: The 32-byte public key, base64url without padding.
+    ConnectSelf:
+      type: object
+      description: Who an application is, as Cauthy holds it (CAUTHY_KEY).
+      required:
+        - issuer
+        - audience
+        - tenant
+        - system
+        - client_id
+        - sign_in_client_id
+        - app_urls
+        - callback_path
+      properties:
+        issuer:
+          type: string
+          description: The issuer of the tokens the application verifies.
+        audience:
+          type: string
+          description: The audience of those tokens.
+        tenant:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            slug:
+              type: string
+        system:
+          type: string
+        client_id:
+          type: string
+          description: The client the key authenticates.
+        sign_in_client_id:
+          type: string
+          description: The client people sign in through (`pact.<link>` with a contract; else `client_id`).
+        app_urls:
+          type: array
+          items:
+            type: string
+          description: The origins of the sign-in client's return addresses, in registration order.
+        callback_path:
+          type: string
+          description: The path of its first return address; `/api/auth/callback` by default.
+        key:
+          type: object
+          nullable: true
+          description: The key the application last signed an assertion with.
+          properties:
+            kid:
+              type: string
+            retires_at:
+              type: string
+              format: date-time
+              nullable: true
+        contract:
+          type: object
+          nullable: true
+          description: The application's contract, when a link of the contracts graph names it.
+          properties:
+            link:
+              type: string
+            system_proof:
+              type: string
+              enum:
+                - 'off'
+                - auto
+                - required
+            require_verified_email:
+              type: boolean
+            in_step:
+              type: boolean
+            checked_at:
+              type: string
+              format: date-time
+              nullable: true
     PactStatus:
       type: object
       description: How one contracted system stands against its contract, checked now.
@@ -7799,6 +8274,32 @@ components:
           format: date-time
           nullable: true
           description: When the daily reconciliation last checked this system; null before the first.
+        keys:
+          $ref: '#/components/schemas/PactKeys'
+    PactKeys:
+      type: object
+      description: 'The CAUTHY_KEY of the system''s service client: the kids registered on it and the EdDSA kids published at its jwks_url (the key set last read). Absent while the client has no registered key (RS256 keys only). A kid on one side only is also a `key` item of `missing` or `outside`.'
+      properties:
+        registered:
+          type: array
+          items:
+            type: string
+        published:
+          type: array
+          items:
+            type: string
+        missing:
+          type: array
+          description: Registered, not published, so the application is not deployed with the key.
+          items:
+            type: string
+        outside:
+          type: array
+          description: Published, not registered.
+          items:
+            type: string
+        matches:
+          type: boolean
     PactContract:
       type: object
       required:
@@ -7932,7 +8433,7 @@ components:
       properties:
         kind:
           type: string
-          description: 'What differs: client, redirect_uri, grant_type, role, organization, require_system_proof, system_proof, system_proof_required_at, require_verified_email, persistent_sessions or jwks_url.'
+          description: 'What differs: client, redirect_uri, grant_type, role, organization, require_system_proof, system_proof, system_proof_required_at, require_verified_email, persistent_sessions, jwks_url or key.'
         client_id:
           type: string
           description: The client it is on, when it is on one.

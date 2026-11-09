@@ -13,6 +13,26 @@ type AccountSession struct {
 	ExpiresAt *string `json:"expires_at,omitempty"`
 }
 
+type AddClientKeyRequest struct {
+	// The public half of the new `CAUTHY_KEY`, as an object or as a JSON string.
+	PublicJWK json.RawMessage `json:"public_jwk"`
+	// How long the keys it replaces keep working. Default `24h`.
+	KeepPrevious *string `json:"keep_previous,omitempty"`
+}
+
+type AddClientKeyResponse struct {
+	Kid       *string `json:"kid,omitempty"`
+	CreatedAt *string `json:"created_at,omitempty"`
+	// The keys that were active before, as they stand now.
+	Previous []AddClientKeyResponsePreviousItem `json:"previous,omitempty"`
+}
+
+type AddClientKeyResponsePreviousItem struct {
+	Kid       *string `json:"kid,omitempty"`
+	RetiresAt *string `json:"retires_at,omitempty"`
+	RevokedAt *string `json:"revoked_at,omitempty"`
+}
+
 type AddOrganizationMemberRequest struct {
 	InvitationOptions
 	// Lowercase letters, digits, `-` or `_`, starting with a letter, at most 63.
@@ -130,6 +150,19 @@ type AuthorizationServerMetadata struct {
 	ScopesSupported                            []string `json:"scopes_supported,omitempty"`
 }
 
+// A client's registered key (CAUTHY_KEY). Only its kid is ever shown.
+type ClientKey struct {
+	// RFC 7638 thumbprint of the public key.
+	Kid       string `json:"kid"`
+	CreatedAt string `json:"created_at"`
+	// The previous key of a rotation is accepted until then.
+	RetiresAt  *string `json:"retires_at,omitempty"`
+	RevokedAt  *string `json:"revoked_at,omitempty"`
+	LastUsedAt *string `json:"last_used_at,omitempty"`
+	// The key the application should sign with.
+	Current bool `json:"current"`
+}
+
 // Colours, corners and typeface of an application's forms. Unset fields are absent.
 type ClientLook struct {
 	Surface           *string          `json:"surface,omitempty"`
@@ -165,6 +198,48 @@ type ConditionalPermission struct {
 	Resource *string `json:"resource,omitempty"`
 	Action   *string `json:"action,omitempty"`
 	Effect   *string `json:"effect,omitempty"`
+}
+
+// Who an application is, as Cauthy holds it (CAUTHY_KEY).
+type ConnectSelf struct {
+	// The issuer of the tokens the application verifies.
+	Issuer string `json:"issuer"`
+	// The audience of those tokens.
+	Audience string            `json:"audience"`
+	Tenant   ConnectSelfTenant `json:"tenant"`
+	System   string            `json:"system"`
+	// The client the key authenticates.
+	ClientID string `json:"client_id"`
+	// The client people sign in through (`pact.<link>` with a contract; else `client_id`).
+	SignInClientID string `json:"sign_in_client_id"`
+	// The origins of the sign-in client's return addresses, in registration order.
+	AppURLs []string `json:"app_urls"`
+	// The path of its first return address; `/api/auth/callback` by default.
+	CallbackPath string `json:"callback_path"`
+	// The key the application last signed an assertion with.
+	Key *ConnectSelfKey `json:"key,omitempty"`
+	// The application's contract, when a link of the contracts graph names it.
+	Contract *ConnectSelfContract `json:"contract,omitempty"`
+}
+
+// The application's contract, when a link of the contracts graph names it.
+type ConnectSelfContract struct {
+	Link                 *string `json:"link,omitempty"`
+	SystemProof          *string `json:"system_proof,omitempty"`
+	RequireVerifiedEmail *bool   `json:"require_verified_email,omitempty"`
+	InStep               *bool   `json:"in_step,omitempty"`
+	CheckedAt            *string `json:"checked_at,omitempty"`
+}
+
+// The key the application last signed an assertion with.
+type ConnectSelfKey struct {
+	Kid       *string `json:"kid,omitempty"`
+	RetiresAt *string `json:"retires_at,omitempty"`
+}
+
+type ConnectSelfTenant struct {
+	ID   *string `json:"id,omitempty"`
+	Slug *string `json:"slug,omitempty"`
 }
 
 // An AI agent the person granted access to a resource.
@@ -867,12 +942,23 @@ type PactHeldClient struct {
 
 // One difference between the contract and what Cauthy holds.
 type PactItem struct {
-	// What differs: client, redirect_uri, grant_type, role, organization, require_system_proof, system_proof, system_proof_required_at, require_verified_email, persistent_sessions or jwks_url.
+	// What differs: client, redirect_uri, grant_type, role, organization, require_system_proof, system_proof, system_proof_required_at, require_verified_email, persistent_sessions, jwks_url or key.
 	Kind string `json:"kind"`
 	// The client it is on, when it is on one.
 	ClientID *string `json:"client_id,omitempty"`
 	Value    string  `json:"value"`
 	Detail   *string `json:"detail,omitempty"`
+}
+
+// The CAUTHY_KEY of the system's service client: the kids registered on it and the EdDSA kids published at its jwks_url (the key set last read). Absent while the client has no registered key (RS256 keys only). A kid on one side only is also a `key` item of `missing` or `outside`.
+type PactKeys struct {
+	Registered []string `json:"registered,omitempty"`
+	Published  []string `json:"published,omitempty"`
+	// Registered, not published, so the application is not deployed with the key.
+	Missing []string `json:"missing,omitempty"`
+	// Published, not registered.
+	Outside []string `json:"outside,omitempty"`
+	Matches *bool    `json:"matches,omitempty"`
 }
 
 // How one contracted system stands against its contract, checked now.
@@ -889,7 +975,8 @@ type PactStatus struct {
 	// What the contract names that Cauthy does not hold as it says.
 	Missing []PactItem `json:"missing"`
 	// When the daily reconciliation last checked this system; null before the first.
-	ReconciledAt *string `json:"reconciled_at"`
+	ReconciledAt *string   `json:"reconciled_at"`
+	Keys         *PactKeys `json:"keys,omitempty"`
 }
 
 type PasskeyPlace struct {
@@ -991,6 +1078,14 @@ type PublicAuthSettings struct {
 	ConsentPurposes    []ConsentPurposeDefinition `json:"consent_purposes,omitempty"`
 	// Absent when the workspace asks nothing.
 	Legal *SignupLegalInfo `json:"legal,omitempty"`
+}
+
+// An Ed25519 public key (RFC 8037). `kid`, `alg` and `use` are ignored: Cauthy computes the `kid` itself (RFC 7638 thumbprint). A private member (`d`…) or any other member is refused.
+type PublicJWK struct {
+	Kty string `json:"kty"`
+	Crv string `json:"crv"`
+	// The 32-byte public key, base64url without padding.
+	X string `json:"x"`
 }
 
 type RegisterRequest struct {

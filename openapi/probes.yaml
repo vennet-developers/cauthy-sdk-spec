@@ -357,6 +357,10 @@ probes:
     op: GET /v1/oauth/logout
     query: {client_id: "{client_id}"}
     expect: [200, 302]
+  - id: connect-self
+    op: GET /v1/connect/self
+    auth: system_token
+    expect: 200
 
   # ── Organizations, as the system manages them ──────────────────────────
   - id: organizations
@@ -539,6 +543,27 @@ probes:
     auth: owner_token
     params: {client_id: "{client_id}"}
     expect: [200, 404]
+  - id: oauth-client-keys
+    op: GET /v1/oauth/clients/{client_id}/keys
+    auth: owner_token
+    params: {client_id: "{client_id}"}
+    expect: 200
+  - id: oauth-client-key-not-ed25519
+    op: POST /v1/oauth/clients/{client_id}/keys
+    auth: owner_token
+    params: {client_id: "{client_id}"}
+    body: {public_jwk: {kty: RSA, n: api-check, e: AQAB}}
+    expect: 400
+  - id: oauth-client-key-revoke-unknown
+    op: DELETE /v1/oauth/clients/{client_id}/keys/{kid}
+    auth: owner_token
+    params: {client_id: "{client_id}", kid: "api-check-{run}"}
+    expect: 404
+  - id: oauth-client-secret-remove-unknown-client
+    op: DELETE /v1/oauth/clients/{client_id}/secret
+    auth: owner_token
+    params: {client_id: "api-check-{run}"}
+    expect: 404
   - id: pact-status
     op: GET /v1/pact/status
     auth: owner_token

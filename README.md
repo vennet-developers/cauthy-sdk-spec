@@ -97,6 +97,8 @@ Cauthy matches it.
 | The Go types (Go module `go`) | `go/vX.Y.Z` | the tag is the release |
 | `@cauthyhq/spec` | `spec/vX.Y.Z` (= `packages/spec/package.json`'s version) | `release.yml`, approved in the `npm` environment, trusted publishing |
 
+`conformance/v0.5.0`, `spec/v0.2.0`, `go/v0.2.0`: `CAUTHY_KEY` (key/cauthy-key.md), vectors, `--key-env`.
+
 ## License
 
 Apache License 2.0: see [LICENSE](LICENSE) and [NOTICE](NOTICE).
