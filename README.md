@@ -16,6 +16,7 @@ The specification behind every Cauthy SDK, and the suite that proves an SDK foll
 | `verification/rules.md` | What a backend checks on a Cauthy access token, and the closed list of reason codes |
 | `vectors/` | Signed test tokens and the verdict every verifier must reach, generated from test-only keys |
 | `contract/pact.md` | How an SDK reads a Pact contract and when it refuses to start |
+| `key/cauthy-key.md` | `CAUTHY_KEY`: the one value an application needs; parsing, derivation, signing, identity (read by every SDK, the CLI and Cauthy's dashboard) |
 | `conformance/` | The runner: point it at a backend and it says what passes |
 
 ## Run the conformance runner
