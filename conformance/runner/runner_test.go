@@ -84,10 +84,19 @@ func TestRunUsageErrors(t *testing.T) {
 }
 
 func TestOptionsNeverShowThePassword(t *testing.T) {
-	o := runner.Options{Target: "http://x/api/auth", Origin: "http://x", Email: "ana@example.com", Password: "s3cret-pw", Cauthy: "http://c", Tenant: "acme", AdminToken: "s3cret-admin"}
+	o := runner.Options{Target: "http://x/api/auth", Origin: "http://x", Email: "ana@example.com", Password: "s3cret-pw", Cauthy: "http://c", Tenant: "acme", AdminToken: "s3cret-admin", Key: "cauthy1.s3cret-key"}
 	for _, verb := range []string{"%v", "%+v", "%#v", "%s"} {
 		if got := fmt.Sprintf(verb, o); strings.Contains(got, "s3cret") || !strings.Contains(got, "ana@example.com") {
 			t.Errorf("%s: %s", verb, got)
 		}
+	}
+}
+
+func TestKeyChecksRunOnlyWithAKey(t *testing.T) {
+	b := runnertest.NewBackend()
+	defer b.Close()
+	out, err := runner.Run(context.Background(), runner.Options{Target: b.Target, Origin: b.URL, Email: b.Email, Password: b.Password})
+	if err != nil || strings.Contains(out.Text, "key.") {
+		t.Fatalf("a run without a key has key.* checks: %v\n%s", err, out.Text)
 	}
 }

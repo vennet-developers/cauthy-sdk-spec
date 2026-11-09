@@ -46,3 +46,8 @@ type Cauthy struct {
 func (b *Backend) StartCauthy(token string) Cauthy {
 	return Cauthy{URL: b.srv.StartCauthy(token), Tenant: fake.Tenant, ClientID: fake.ClientID}
 }
+
+// IssueKey makes a CAUTHY_KEY for the backend's client, with base (the fake
+// Cauthy's URL) as its issuer, and registers its public half there, as the
+// dashboard would. Pass it as Options.Key to run the key.* checks.
+func (b *Backend) IssueKey(base string) string { return b.srv.IssueKey(base) }

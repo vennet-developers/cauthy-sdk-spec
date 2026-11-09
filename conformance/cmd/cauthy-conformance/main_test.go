@@ -132,3 +132,26 @@ func TestSwitchesWithoutCauthyIsAUsageError(t *testing.T) {
 		t.Fatalf("exit %d, stderr %q", code, errOut.String())
 	}
 }
+
+func TestKeyEnvEmptyExits2(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := run(context.Background(), options{target: "http://x", origin: "http://x", level: "basic", table: table, keyEnv: "ACME_CAUTHY_KEY"}, &out, &errOut)
+	if code != 2 || !strings.Contains(errOut.String(), "--key-env ACME_CAUTHY_KEY") {
+		t.Fatalf("exit %d, stderr %q", code, errOut.String())
+	}
+}
+
+func TestKeyAgainstTheFake(t *testing.T) {
+	srv := fake.New(fake.Knobs{Strict: true})
+	defer srv.Close()
+	base := srv.StartCauthy("admin-token")
+	key := srv.IssueKey(base)
+	var out bytes.Buffer
+	code := run(context.Background(), options{
+		target: srv.Target(), origin: srv.URL, email: srv.Email, password: srv.Password, level: "strict", table: table,
+		cauthy: base, tenant: fake.Tenant, adminToken: "admin-token", clientID: fake.ClientID, keyEnv: "CAUTHY_KEY", key: key,
+	}, &out, &out)
+	if code != 0 || !strings.Contains(out.String(), "key.identity") || strings.Contains(out.String(), key) {
+		t.Fatalf("exit %d:\n%s", code, out.String())
+	}
+}

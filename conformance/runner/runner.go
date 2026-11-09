@@ -27,7 +27,7 @@ const (
 )
 
 // Options says what to drive. Password is never logged or reported, and
-// Options prints without it.
+// Options prints without it, the admin token or the key.
 type Options struct {
 	Target   string // the backend's prefix, e.g. http://localhost:3999/api/auth
 	Origin   string // the application's origin, e.g. http://localhost:3999
@@ -44,6 +44,10 @@ type Options struct {
 	AdminToken string        // a token with settings:manage, oauth_clients:manage, users:manage and users:delete; never printed
 	ClientID   string        // the backend's OAuth client, for the persistent-sessions switch; "" skips that one
 	SwitchWait time.Duration // how long the backend has to follow a switch; 0 is 10 s
+
+	// Key is the CAUTHY_KEY the backend runs on. When set, the key.* checks
+	// run (key/cauthy-key.md); never printed or reported.
+	Key string
 }
 
 // String shows the options with the password masked, so a logged Options
@@ -61,8 +65,12 @@ func (o Options) String() string {
 	if o.AdminToken != "" {
 		token = "[hidden]"
 	}
-	return fmt.Sprintf("{Target:%s Origin:%s Email:%s Password:%s Level:%s JWKSPath:%s Table:%s Cauthy:%s Tenant:%s AdminToken:%s ClientID:%s SwitchWait:%s}",
-		o.Target, o.Origin, o.Email, pw, o.Level, o.JWKSPath, table, o.Cauthy, o.Tenant, token, o.ClientID, o.SwitchWait)
+	key := ""
+	if o.Key != "" {
+		key = "[hidden]"
+	}
+	return fmt.Sprintf("{Target:%s Origin:%s Email:%s Password:%s Level:%s JWKSPath:%s Table:%s Cauthy:%s Tenant:%s AdminToken:%s ClientID:%s SwitchWait:%s Key:%s}",
+		o.Target, o.Origin, o.Email, pw, o.Level, o.JWKSPath, table, o.Cauthy, o.Tenant, token, o.ClientID, o.SwitchWait, key)
 }
 
 // GoString keeps %#v from printing the password too.
@@ -151,12 +159,15 @@ func Run(ctx context.Context, o Options) (Outcome, error) {
 		return Outcome{}, usagef("the route table: %v", err)
 	}
 	c := &check.Ctx{Client: client.NewContext(ctx, o.Target, o.Origin), Table: table, Email: o.Email, Password: o.Password, JWKSPath: o.JWKSPath,
-		SwitchWait: o.SwitchWait}
+		SwitchWait: o.SwitchWait, Key: o.Key, Cauthy: o.Cauthy}
 	if o.Cauthy != "" {
 		c.Admin = admin.New(ctx, o.Cauthy, o.Tenant, o.AdminToken, o.ClientID)
 	}
 	reg := &check.Registry{}
 	checks.RegisterAll(reg)
+	if o.Key != "" {
+		checks.RegisterKey(reg)
+	}
 	rep := reg.Run(c, level)
 	out := Outcome{Text: rep.Text(), JSON: rep.JSON(), Passed: rep.Passed(), Complete: rep.Complete()}
 	if err := ctx.Err(); err != nil {

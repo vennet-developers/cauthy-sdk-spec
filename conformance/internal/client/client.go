@@ -80,7 +80,17 @@ func (c *Client) Cookies() []*http.Cookie {
 // is closed. A 429 is an error ("rate limited by the backend or Cauthy: …"),
 // because no check can say anything true about an answer that was throttled.
 func (c *Client) Do(method, path string, body []byte, headers map[string]string) (*Response, error) {
-	req, err := http.NewRequestWithContext(c.ctx, method, c.Target+path, bytes.NewReader(body))
+	return c.do(method, c.Target+path, path, body, headers)
+}
+
+// GetOrigin sends a GET for a path at the application's origin rather than
+// under the target's prefix: a contract's JWKS, for one.
+func (c *Client) GetOrigin(path string) (*Response, error) {
+	return c.do(http.MethodGet, c.Origin+path, path, nil, nil)
+}
+
+func (c *Client) do(method, u, path string, body []byte, headers map[string]string) (*Response, error) {
+	req, err := http.NewRequestWithContext(c.ctx, method, u, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

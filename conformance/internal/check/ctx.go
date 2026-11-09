@@ -18,6 +18,11 @@ type Ctx struct {
 	Email    string
 	Password string
 	JWKSPath string // "" when the backend is not in contract mode
+	// Key is the CAUTHY_KEY the backend runs on ("" when the run is not
+	// about a key: the key.* checks are then not registered). Never reported.
+	Key string
+	// Cauthy is the --cauthy base URL ("" when none).
+	Cauthy string
 	// Admin changes the tenant's settings in Cauthy for the switch checks;
 	// nil when the run has no Cauthy (--cauthy), and then they skip.
 	Admin *admin.Client

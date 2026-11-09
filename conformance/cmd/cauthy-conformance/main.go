@@ -28,6 +28,7 @@ import (
 type options struct {
 	target, origin, email, password, level, table, jsonOut, jwksPath string
 	cauthy, tenant, adminTokenEnv, adminToken, clientID              string
+	keyEnv, key                                                      string
 	switchWait                                                       time.Duration
 }
 
@@ -44,14 +45,18 @@ func main() {
 	flag.StringVar(&o.tenant, "tenant", "", "the backend's workspace slug in Cauthy")
 	flag.StringVar(&o.adminTokenEnv, "admin-token-env", "CAUTHY_ADMIN_TOKEN", "the environment variable that holds Cauthy's admin token")
 	flag.StringVar(&o.clientID, "client-id", "", "the backend's OAuth client in Cauthy, for the persistent-sessions switch")
+	flag.StringVar(&o.keyEnv, "key-env", "", "the environment variable holding the CAUTHY_KEY the backend runs on; adds the key.* checks")
 	flag.DurationVar(&o.switchWait, "switch-wait", 10*time.Second, "how long the backend has to follow a switch")
 	flag.Usage = usage
 	flag.Parse()
-	// The password and the admin token are read from the environment only: a
+	// The password, the admin token and the key are read from the environment only: a
 	// flag would end up in shell history and the process list.
 	o.password = os.Getenv("CONFORMANCE_PASSWORD")
 	if o.cauthy != "" {
 		o.adminToken = os.Getenv(o.adminTokenEnv)
+	}
+	if o.keyEnv != "" {
+		o.key = os.Getenv(o.keyEnv)
 	}
 	// Ctrl-C stops the run: no request starts after it.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -68,6 +73,7 @@ func usage() {
 environment:
   CONFORMANCE_PASSWORD  the test account's password (never a flag)
   CAUTHY_ADMIN_TOKEN    with --cauthy: a token of the tenant's admin (another name with --admin-token-env)
+  (--key-env NAME)      the CAUTHY_KEY the backend runs on, for the key.* checks; never printed
 
 exit codes:
   0  every check of the level passed and none was skipped
@@ -79,6 +85,10 @@ exit codes:
 
 // run writes the report to out and usage or configuration errors to errOut.
 func run(ctx context.Context, o options, out, errOut io.Writer) int {
+	if o.keyEnv != "" && o.key == "" {
+		fmt.Fprintf(errOut, "--key-env %s: the variable is empty\n", o.keyEnv)
+		return 2
+	}
 	var table []byte
 	if o.table != "" {
 		raw, err := os.ReadFile(o.table)
@@ -90,7 +100,7 @@ func run(ctx context.Context, o options, out, errOut io.Writer) int {
 	}
 	res, err := runner.Run(ctx, runner.Options{Target: o.target, Origin: o.origin, Email: o.email, Password: o.password,
 		Level: o.level, JWKSPath: o.jwksPath, Table: table,
-		Cauthy: o.cauthy, Tenant: o.tenant, AdminToken: o.adminToken, ClientID: o.clientID, SwitchWait: o.switchWait})
+		Cauthy: o.cauthy, Tenant: o.tenant, AdminToken: o.adminToken, ClientID: o.clientID, SwitchWait: o.switchWait, Key: o.key})
 	var usage *runner.UsageError
 	if errors.As(err, &usage) {
 		fmt.Fprintln(errOut, usage.Msg)
