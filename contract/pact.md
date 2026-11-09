@@ -33,35 +33,51 @@ The SDK stops with a named configuration error, before serving a request, when:
 3. The graph does not list a slug for the tenant the link names.
 4. The link names no redirect URI.
 5. Cauthy's `url`, a `jwks_url` or an `events_url` is not `https://` (`http://` is accepted for `localhost` and `127.0.0.1`).
-6. Any of these variables is set alongside a contract: `CAUTHY_ISSUER`, `CAUTHY_CLIENT_ID`, `CAUTHY_CLIENT_SECRET`, `CAUTHY_SECRET`, `CAUTHY_SYSTEM`, `CAUTHY_TENANT`, `CAUTHY_SYSTEM_KEY`, `CAUTHY_SYSTEM_KEY_ID`. Two sources of the same thing are how an application signs people in through a client nobody meant. An option passed in code that the contract owns is refused the same way.
-7. `PACT_ROOT_KEY` is missing, or is shorter than 32 characters (32 random bytes in base64url are 43).
-8. The link has a `service` block and the application passes no key store.
+6. With `CAUTHY_KEY`: any variable `key/cauthy-key.md` §10 refuses is set, or the key's issuer is not the graph's Cauthy `url` (`key_contract_issuer`). With the legacy root key: any of `CAUTHY_ISSUER`, `CAUTHY_CLIENT_ID`, `CAUTHY_CLIENT_SECRET`, `CAUTHY_SECRET`, `CAUTHY_SYSTEM`, `CAUTHY_TENANT`, `CAUTHY_SYSTEM_KEY`, `CAUTHY_SYSTEM_KEY_ID` is set. Two sources of the same thing are how an application signs people in through a client nobody meant. An option passed in code that the contract owns is refused the same way.
+7. Neither `CAUTHY_KEY` nor `PACT_ROOT_KEY` is set, or `PACT_ROOT_KEY` is shorter than 32 characters.
+8. Legacy root key only: a `service` block but no key store. With `CAUTHY_KEY` no key store is needed.
 9. The `service` block names no `jwks_url` and neither does the system.
-10. The key store keeps no key after writing one, or holds a key the root key cannot open (rotate with `PACT_ROOT_KEY_PREVIOUS`).
+10. Legacy root key only: the key store keeps no key after writing one, or holds a key the root key cannot open (rotate with `PACT_ROOT_KEY_PREVIOUS`).
 
 ## Keys
 
-- The application's key is RS256 (2048 bits), made on first use, sealed at rest with a key derived from `PACT_ROOT_KEY`, kept in the key store, and published at `jwks_url` with `Cache-Control: public, max-age=300`.
+- With `CAUTHY_KEY` the application's key is the Ed25519 key `key/cauthy-key.md` §5 derives. It is never stored and never rotates by itself: rotating it is a new `CAUTHY_KEY` (§9 there). It is published at `jwks_url` as `{"kty":"OKP","crv":"Ed25519","x":…,"kid":…,"alg":"EdDSA","use":"sig"}` with `Cache-Control: public, max-age=300`; during a rotation `CAUTHY_KEY_PREVIOUS`'s is published beside it. Cauthy accepts it only when it is also registered for the link's service client (registered in the dashboard, or adopted from the application's key client when the link was applied).
+- With the legacy `PACT_ROOT_KEY`, the application's key is RS256 (2048 bits), made on first use, sealed at rest with a key derived from `PACT_ROOT_KEY`, kept in the key store, and published at `jwks_url` with `Cache-Control: public, max-age=300`.
 - Derived keys use HKDF-SHA-256 with an empty salt and the label as `info`: `pact/seal/v1` seals the application's private key, `pact/cookie/v1` encrypts the session cookie, `pact/flow/v1` encrypts what a sign-in carries between its steps.
-- Rotating the application's key publishes the new one at once and signs with it after six minutes (the cache time plus a minute); the old key stays published 24 hours.
-- Rotating the root key: set the new one as `PACT_ROOT_KEY` and the old one as `PACT_ROOT_KEY_PREVIOUS` for a deploy. Writes use the new root, reads try both.
+- Rotating the legacy RS256 key publishes the new one at once and signs with it after six minutes (the cache time plus a minute); the old key stays published 24 hours.
+- Rotating the legacy root key: set the new one as `PACT_ROOT_KEY` and the old one as `PACT_ROOT_KEY_PREVIOUS` for a deploy. Writes use the new root, reads try both.
 
 ## The system proof
 
 The application proves itself to Cauthy in two steps.
 
-1. It asks for its own token at `<issuer>/v1/oauth/token` with `grant_type=client_credentials` and a **client assertion** (`private_key_jwt`, RFC 7523) signed with its current key: `alg` RS256 with `kid`; `iss` and `sub` both the service client id (`pact.<link id>.service`); `aud` the token endpoint; `jti`; `iat`; `exp` = `iat` + 2 minutes (Cauthy refuses more than 5, and a repeated `jti`).
+1. It asks for its own token at `<issuer>/v1/oauth/token` with `grant_type=client_credentials` and a **client assertion** (`private_key_jwt`, RFC 7523) signed with its key: `alg` `EdDSA` with `CAUTHY_KEY` (or RS256 with the legacy key store), with `kid`; `iss` and `sub` both the service client id (`pact.<link id>.service`); `aud` the token endpoint; `jti`; `iat`; `exp` = `iat` + 2 minutes (Cauthy refuses more than 5, and a repeated `jti`).
 2. Cauthy answers an access token for the system. It lives 10 minutes and is renewed shortly before it ends.
 
 Every call the backend passes to Cauthy on behalf of a person carries that access token in `X-Cauthy-System-Token`. Cauthy accepts it when it is valid, of the same tenant, and belongs to the system that owns the client the call names. Without a valid proof Cauthy ignores the person's address the application passes on (`X-Cauthy-Client-IP`).
 
 With the proof required, a code exchange for the link's sign-in client, and every sign-in the application's own screens make naming that client, is refused without it (`403 system_proof_required` in both cases).
 
-## Two modes, never both
+## One path, and a contract on top
 
-| Mode | Source of truth | Secret |
+Every application runs on `CAUTHY_KEY` (`key/cauthy-key.md`). A contract adds
+to it; it never asks for a second secret.
+
+| | Without a contract | With a contract |
 | --- | --- | --- |
-| Contract | `contracts/graph.json` + `contracts/VERSION`, committed | `PACT_ROOT_KEY` |
-| Variables | `CAUTHY_*` in the environment | `CAUTHY_SECRET` (at least 32 characters), `CAUTHY_CLIENT_SECRET` |
+| Secret | `CAUTHY_KEY` | `CAUTHY_KEY` |
+| Who the application is | Asked of Cauthy (`GET /v1/connect/self`) | Read from the graph: issuer, tenant, `pact.<link>`, `pact.<link>.service` |
+| Client the key authenticates | the client named in the key | the link's service client |
+| Sign-in client | the key's client | `pact.<link>` |
+| System proof | sent, not required | sent; required as `system_proof` says |
+| Published keys | none | the key's public half at `jwks_url` (`alg` `EdDSA`) |
+| Drift | — | `GET /v1/pact/status`, including `keys` |
 
-The route set an SDK serves is the same in both modes; contract mode adds `GET <jwks path>`.
+The route set an SDK serves is the same in both; with a contract it adds
+`GET <jwks path>`.
+
+### Legacy (1.x only)
+
+`PACT_ROOT_KEY` (+ `PACT_ROOT_KEY_PREVIOUS`) with an RS256 key kept in a key
+store, and the variables mode (`CAUTHY_*`), keep working in 1.x with one
+deprecation warning per process and leave in 2.0.
