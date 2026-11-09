@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/cauthykey"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/routes"
 )
 
@@ -115,6 +116,9 @@ type Server struct {
 	stalePersistent bool
 	cauthy          *httptest.Server
 	adminToken      string
+
+	keysOnce sync.Once
+	keys     *keyring // what the fake Cauthy knows of CAUTHY_KEYs (keys.go)
 }
 
 var (
@@ -232,6 +236,16 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(map[string]any{"data": v})
+	}
+	// A backend on CAUTHY_KEY authenticates with its key, not the admin token.
+	base := s.cauthy.URL
+	if r.Method == http.MethodPost && r.URL.Path == "/v1/oauth/token" && r.FormValue("client_assertion_type") == cauthykey.AssertionType {
+		s.assertionToken(w, r, base)
+		return
+	}
+	if r.Method == http.MethodGet && r.URL.Path == "/v1/connect/self" {
+		s.self(w, r, base)
+		return
 	}
 	if s.adminToken == "" || r.Header.Get("Authorization") != "Bearer "+s.adminToken {
 		refuse(401, "unauthorized")
