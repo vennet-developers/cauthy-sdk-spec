@@ -99,7 +99,7 @@ Cauthy matches it.
 
 `conformance/v0.5.0`, `spec/v0.2.0`, `go/v0.2.0`: `CAUTHY_KEY` (key/cauthy-key.md), vectors, `--key-env`.
 
-`conformance/v0.6.0`, `spec/v0.3.0`, `go/v0.3.0` (not tagged yet): contracts retired. `contract/pact.md`, `/v1/pact/status`, `connect/self`'s `contract`, the `key.jwks` check, `--jwks-path` and the `pact/seal/v1` label are gone; `sign_in_client_id` and the per-application sign-in switches are in `key/cauthy-key.md` §7–8.
+`conformance/v0.6.0`, `spec/v0.3.0`, `go/v0.3.0`: `sign_in_client_id` and the per-application sign-in switches (`key/cauthy-key.md` §7–8); the `key.jwks` check is gone.
 
 ## License
 

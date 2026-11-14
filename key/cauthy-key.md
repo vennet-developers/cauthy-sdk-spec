@@ -84,8 +84,7 @@ The same access token is the system proof (`X-Cauthy-System-Token`).
 
 `sign_in_client_id` is the client people sign in through. It is usually
 `client_id`. When it names another client (an application whose key is on a
-system identity that signs nobody in itself, such as one once connected by a
-contract), the backend uses it for every person's call to
+system identity that signs nobody in itself), the backend uses it for every person's call to
 `<issuer>/v1/oauth/authorize`, `/token` and `/revoke`, as a public client:
 PKCE (S256), no client assertion and no secret, and the code exchange carries
 `X-Cauthy-System-Token`. The assertion (§6) always names the key's own client
@@ -133,9 +132,3 @@ written. Signing always uses `CAUTHY_KEY`.
 `CAUTHY_AUDIENCE`, `CAUTHY_TENANT_ID`. `CAUTHY_SECRET` is accepted beside it
 only as a read-only previous key while an application moves to `CAUTHY_KEY`
 (with one warning); in 2.0 it is refused too.
-
-Contracts (Pact) are retired. An SDK from 1.3.0 refuses to start when
-`PACT_ROOT_KEY` or `PACT_ROOT_KEY_PREVIOUS` is set, whether or not
-`CAUTHY_KEY` is, and takes no contract option. The error says to run on
-`CAUTHY_KEY` alone. It reads no contracts graph, serves no JWKS of its own,
-and never calls `/v1/pact/status`, which Cauthy no longer serves.
