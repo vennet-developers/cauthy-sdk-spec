@@ -50,7 +50,7 @@ func TestMethodsFollowTheSettingsAtOnce(t *testing.T) {
 	if m := mustGet(t, c, "/methods").JSON; m["signUp"] != false || m["magicLink"] != true || m["passkey"] != true {
 		t.Fatalf("after the switch: %v", m)
 	}
-	adminDo(t, base, "admin-token", "PATCH", "/v1/oauth/clients/"+ClientID, map[string]any{"allow_persistent_sessions": true})
+	adminDo(t, base, "admin-token", "PUT", "/v1/settings/auth", map[string]any{"persistent_sessions": true})
 	if m := mustGet(t, c, "/methods").JSON; m["persistentSessions"] != true {
 		t.Fatalf("persistent: %v", m)
 	}

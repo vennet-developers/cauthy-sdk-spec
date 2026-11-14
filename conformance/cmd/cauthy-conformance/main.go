@@ -43,7 +43,7 @@ func main() {
 	flag.StringVar(&o.cauthy, "cauthy", "", "Cauthy's address, for the dashboard-switch checks")
 	flag.StringVar(&o.tenant, "tenant", "", "the backend's workspace slug in Cauthy")
 	flag.StringVar(&o.adminTokenEnv, "admin-token-env", "CAUTHY_ADMIN_TOKEN", "the environment variable that holds Cauthy's admin token")
-	flag.StringVar(&o.clientID, "client-id", "", "the backend's OAuth client in Cauthy, for the persistent-sessions switch")
+	flag.StringVar(&o.clientID, "client-id", "", "deprecated and ignored: persistent sessions are a workspace setting now")
 	flag.StringVar(&o.keyEnv, "key-env", "", "the environment variable holding the CAUTHY_KEY the backend runs on; adds the key.* checks")
 	flag.DurationVar(&o.switchWait, "switch-wait", 10*time.Second, "how long the backend has to follow a switch")
 	flag.Usage = usage

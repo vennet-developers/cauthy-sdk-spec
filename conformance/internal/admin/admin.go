@@ -1,7 +1,6 @@
 // Package admin drives the part of Cauthy's admin API the dashboard-switch
 // checks need, as an admin would from the dashboard: the tenant's sign-in
-// settings (PUT /v1/settings/auth), the backend's client
-// (PATCH /v1/oauth/clients/{client_id}) and the accounts a check signed up
+// settings (PUT /v1/settings/auth) and the accounts a check signed up
 // (GET /v1/users, DELETE /v1/users/{id}). It remembers what it found before
 // changing anything, and Restore puts it back.
 package admin
@@ -23,17 +22,15 @@ import (
 
 // Client is one tenant's admin, by token. Its token is never printed.
 type Client struct {
-	Base     string // Cauthy's address, e.g. http://localhost:8080
-	Tenant   string // the workspace's slug
-	ClientID string // the backend's OAuth client; "" when the run did not name it
-	token    string
-	ctx      context.Context
-	http     *http.Client
+	Base   string // Cauthy's address, e.g. http://localhost:8080
+	Tenant string // the workspace's slug
+	token  string
+	ctx    context.Context
+	http   *http.Client
 
-	mu             sync.Mutex
-	original       map[string]any // each changed setting as found
-	clientOriginal *bool          // allow_persistent_sessions as found
-	made           []string       // addresses of accounts the checks signed up
+	mu       sync.Mutex
+	original map[string]any // each changed setting as found
+	made     []string       // addresses of accounts the checks signed up
 }
 
 // restoreTimeout bounds putting the tenant back: three tries of each call,
@@ -41,14 +38,14 @@ type Client struct {
 const restoreTimeout = 5 * time.Minute
 
 // New is an admin of tenant on the Cauthy at base. Every call is bound to ctx.
-func New(ctx context.Context, base, tenant, token, clientID string) *Client {
-	return &Client{Base: strings.TrimSuffix(base, "/"), Tenant: tenant, ClientID: clientID, token: token, ctx: ctx,
+func New(ctx context.Context, base, tenant, token string) *Client {
+	return &Client{Base: strings.TrimSuffix(base, "/"), Tenant: tenant, token: token, ctx: ctx,
 		http: &http.Client{Timeout: 20 * time.Second}, original: map[string]any{}}
 }
 
 // String shows the client without its token.
 func (c *Client) String() string {
-	return fmt.Sprintf("admin{Base:%s Tenant:%s ClientID:%s Token:[hidden]}", c.Base, c.Tenant, c.ClientID)
+	return fmt.Sprintf("admin{Base:%s Tenant:%s Token:[hidden]}", c.Base, c.Tenant)
 }
 
 // GoString keeps %#v from printing the token too.
@@ -166,34 +163,6 @@ func (c *Client) Set(changes map[string]any) error {
 	return err
 }
 
-// SetPersistent sets allow_persistent_sessions on the backend's client
-// (PATCH /v1/oauth/clients/{client_id}), keeping its value as found.
-func (c *Client) SetPersistent(on bool) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.ClientID == "" {
-		return errors.New("no client: name the backend's client with --client-id")
-	}
-	if c.clientOriginal == nil {
-		list, err := c.call(http.MethodGet, "/v1/oauth/clients", nil)
-		if err != nil {
-			return err
-		}
-		items, _ := list["data"].([]any)
-		for _, it := range items {
-			if m, ok := it.(map[string]any); ok && m["client_id"] == c.ClientID {
-				was, _ := m["allow_persistent_sessions"].(bool)
-				c.clientOriginal = &was
-			}
-		}
-		if c.clientOriginal == nil {
-			return fmt.Errorf("GET /v1/oauth/clients does not list the client %s", c.ClientID)
-		}
-	}
-	_, err := c.call(http.MethodPatch, "/v1/oauth/clients/"+url.PathEscape(c.ClientID), map[string]any{"allow_persistent_sessions": on})
-	return err
-}
-
 // Made records an account a check signed up, for Restore to delete.
 func (c *Client) Made(email string) {
 	c.mu.Lock()
@@ -201,7 +170,7 @@ func (c *Client) Made(email string) {
 	c.made = append(c.made, email)
 }
 
-// Restore puts back every setting and the client's switch as found, and
+// Restore puts back every setting as found, and
 // deletes the accounts the checks signed up. What it could not put back is
 // in the errors; what it did put back is forgotten, so a second call does
 // nothing more.
@@ -218,13 +187,6 @@ func (c *Client) Restore() []error {
 			errs = append(errs, err)
 		} else {
 			c.original = map[string]any{}
-		}
-	}
-	if c.clientOriginal != nil {
-		if _, err := c.callCtx(ctx, http.MethodPatch, "/v1/oauth/clients/"+url.PathEscape(c.ClientID), map[string]any{"allow_persistent_sessions": *c.clientOriginal}); err != nil {
-			errs = append(errs, err)
-		} else {
-			c.clientOriginal = nil
 		}
 	}
 	var left []string

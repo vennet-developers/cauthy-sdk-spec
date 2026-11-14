@@ -17,7 +17,7 @@ func switchCtx(t *testing.T, k fake.Knobs) (*check.Ctx, *fake.Server) {
 	t.Helper()
 	ctx, srv := ctxFor(t, k)
 	base := srv.StartCauthy("admin-token")
-	ctx.Admin = admin.New(context.Background(), base, fake.Tenant, "admin-token", fake.ClientID)
+	ctx.Admin = admin.New(context.Background(), base, fake.Tenant, "admin-token")
 	ctx.SwitchWait = time.Second
 	return ctx, srv
 }
@@ -53,8 +53,8 @@ func TestEverySwitchPassesOnABackendThatFollowsCauthy(t *testing.T) {
 				t.Errorf("%s left %s = %v", id, k, srv.Setting(k))
 			}
 		}
-		if srv.ClientPersistent() || len(srv.Accounts()) != 0 {
-			t.Errorf("%s left the client persistent=%v, accounts %v", id, srv.ClientPersistent(), srv.Accounts())
+		if srv.Setting("persistent_sessions") != false || len(srv.Accounts()) != 0 {
+			t.Errorf("%s left persistent_sessions = %v, accounts %v", id, srv.Setting("persistent_sessions"), srv.Accounts())
 		}
 	}
 }
@@ -81,7 +81,7 @@ func TestEachSwitchFailsOnABackendThatIgnoresIt(t *testing.T) {
 		if res.Status != check.StatusFail || !strings.Contains(res.Detail, tc.want) {
 			t.Errorf("%s with %+v: want a failure naming %q, got %s %s", tc.id, tc.k, tc.want, res.Status, res.Detail)
 		}
-		if len(srv.Accounts()) != 0 || srv.ClientPersistent() || srv.Setting("allow_password") != true {
+		if len(srv.Accounts()) != 0 || srv.Setting("persistent_sessions") != false || srv.Setting("allow_password") != true {
 			t.Errorf("%s with %+v did not put the tenant back", tc.id, tc.k)
 		}
 	}
@@ -97,26 +97,12 @@ func TestSwitchesSkipWithoutCauthy(t *testing.T) {
 
 func TestASwitchCauthyRefusesIsSkipped(t *testing.T) {
 	ctx, _ := switchCtx(t, fake.Knobs{})
-	ctx.Admin = admin.New(context.Background(), ctx.Admin.Base, fake.Tenant, "wrong-token", fake.ClientID)
+	ctx.Admin = admin.New(context.Background(), ctx.Admin.Base, fake.Tenant, "wrong-token")
 	reg := &check.Registry{}
 	RegisterSwitches(reg)
 	res := reg.All()[0].Run(ctx)
 	if res.Status != check.StatusSkip || !strings.Contains(res.Detail, "401") || strings.Contains(res.Detail, "wrong-token") {
 		t.Fatalf("%s %s", res.Status, res.Detail)
-	}
-}
-
-func TestThePersistentSwitchNeedsTheClient(t *testing.T) {
-	ctx, _ := switchCtx(t, fake.Knobs{})
-	ctx.Admin.ClientID = ""
-	reg := &check.Registry{}
-	RegisterSwitches(reg)
-	for _, c := range reg.All() {
-		if c.ID == "switches.persistent_sessions" {
-			if res := c.Run(ctx); res.Status != check.StatusSkip || !strings.Contains(res.Detail, "--client-id") {
-				t.Fatalf("%s %s", res.Status, res.Detail)
-			}
-		}
 	}
 }
 

@@ -12,7 +12,7 @@ import (
 
 // SwitchSettings are the tenant settings the switch checks change through
 // PUT /v1/settings/auth; a test keeps them in step with openapi/cauthy.yaml.
-var SwitchSettings = []string{"allow_signup", "allow_password", "allow_magic_link", "allow_passkeys", "confirm_email", "verify_grace_days"}
+var SwitchSettings = []string{"allow_signup", "allow_password", "allow_magic_link", "allow_passkeys", "confirm_email", "verify_grace_days", "persistent_sessions"}
 
 // Sign-in slots of the switch checks (see check.Ctx.SignIn): three more
 // sign-ins than a run without --cauthy.
@@ -256,16 +256,13 @@ func long(res *client.Response) bool {
 }
 
 func switchPersistent(c *check.Ctx) check.Result {
-	if c.Admin.ClientID == "" {
-		return check.Skip("needs --client-id: the backend's OAuth client in Cauthy")
-	}
 	if c.Email == "" || c.Password == "" {
 		return check.Skip("no credentials")
 	}
-	if err := c.Admin.SetPersistent(true); err != nil {
+	if err := c.Admin.Set(map[string]any{"persistent_sessions": true}); err != nil {
 		return check.Skip("Cauthy refused the switch: " + err.Error())
 	}
-	if stop := follows(c, "persistent sessions on for the client", "persistentSessions", true); stop != nil {
+	if stop := follows(c, "persistent sessions on for the workspace", "persistentSessions", true); stop != nil {
 		return *stop
 	}
 	_, res, stop := signedIn(c, slotRememberOn, true)
@@ -273,9 +270,9 @@ func switchPersistent(c *check.Ctx) check.Result {
 		return *stop
 	}
 	if !long(res) {
-		return check.Fail("persistent sessions on for the client and remember:true, and the session cookie has no Max-Age")
+		return check.Fail("persistent sessions on for the workspace and remember:true, and the session cookie has no Max-Age")
 	}
-	if err := c.Admin.SetPersistent(false); err != nil {
+	if err := c.Admin.Set(map[string]any{"persistent_sessions": false}); err != nil {
 		return check.Skip("Cauthy refused the switch: " + err.Error())
 	}
 	_, ok, err := methodsUntil(c, func(m map[string]any) bool { return m["persistentSessions"] != true })
@@ -283,14 +280,14 @@ func switchPersistent(c *check.Ctx) check.Result {
 		return check.Fail(err.Error())
 	}
 	if !ok {
-		return check.Fail(fmt.Sprintf("persistent sessions off for the client, and /methods.persistentSessions still said true after %s", wait(c)))
+		return check.Fail(fmt.Sprintf("persistent sessions off for the workspace, and /methods.persistentSessions still said true after %s", wait(c)))
 	}
 	_, res, stop = signedIn(c, slotRememberOff, true)
 	if stop != nil {
 		return *stop
 	}
 	if long(res) {
-		return check.Fail("persistent sessions off for the client, and remember:true still made a long session cookie")
+		return check.Fail("persistent sessions off for the workspace, and remember:true still made a long session cookie")
 	}
-	return check.Pass("persistent sessions on then off for the client: /methods.persistentSessions and the cookie followed")
+	return check.Pass("persistent sessions on then off for the workspace: /methods.persistentSessions and the cookie followed")
 }

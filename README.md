@@ -44,14 +44,15 @@ Exit codes: `0` every check of the level passed and none was skipped; `1` a chec
 With a Cauthy and a token of the tenant's admin, the runner also changes the tenant's sign-in
 settings, as an admin would in the dashboard, and checks the backend follows with no restart:
 sign-ups closed then opened, passwords off then on, sign-in links on then off, passkeys off,
-address confirmation on then off, and the backend client's long sessions on then off. It puts
-each setting back as it found it, and deletes the accounts it signed up.
+address confirmation on then off, and "keep me signed in" (the workspace's `persistent_sessions`)
+on then off. It puts each setting back as it found it, and deletes the accounts it signed up.
 
     CONFORMANCE_PASSWORD=… CAUTHY_ADMIN_TOKEN=… bin/cauthy-conformance \
       --target http://localhost:3999/api/auth --origin http://localhost:3999 --email member@example.com \
-      --level switches --cauthy http://localhost:8080 --tenant acme --client-id <the backend's client id>
+      --level switches --cauthy http://localhost:8080 --tenant acme
 
-- The token needs `settings:manage`, `oauth_clients:manage`, `users:manage` and `users:delete`.
+- The token needs `settings:manage`, `users:manage` and `users:delete`.
+- `--client-id` is accepted and ignored: no switch is a client's any more.
   It is read from `CAUTHY_ADMIN_TOKEN` (another variable with `--admin-token-env`), never from a flag.
 - Without `--cauthy` the switch checks skip, and a run at `basic` or `strict` is still complete;
   `--level switches` without `--cauthy` is a usage error. At `basic` or `strict` with `--cauthy`,

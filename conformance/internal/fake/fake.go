@@ -70,15 +70,14 @@ const (
 
 // settingKeys are the tenant settings the fake keeps, and their defaults.
 var settingKeys = map[string]any{"allow_signup": true, "allow_password": true, "allow_magic_link": false,
-	"allow_passkeys": false, "confirm_email": false, "verify_grace_days": float64(0)}
+	"allow_passkeys": false, "confirm_email": false, "verify_grace_days": float64(0), "persistent_sessions": false}
 
 // tenant is what the fake Cauthy holds for its one workspace.
 type tenant struct {
-	mu         sync.Mutex
-	settings   map[string]any
-	persistent bool              // the backend's client allows persistent sessions
-	accounts   map[string]string // address → id, of the accounts signed up
-	n          int
+	mu       sync.Mutex
+	settings map[string]any
+	accounts map[string]string // address → id, of the accounts signed up
+	n        int
 }
 
 func newTenant() *tenant {
@@ -89,14 +88,14 @@ func newTenant() *tenant {
 	return t
 }
 
-func (t *tenant) snapshot() (map[string]any, bool) {
+func (t *tenant) snapshot() map[string]any {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	out := make(map[string]any, len(t.settings))
 	for k, v := range t.settings {
 		out[k] = v
 	}
-	return out, t.persistent
+	return out
 }
 
 type Server struct {
@@ -111,11 +110,10 @@ type Server struct {
 	signedIn map[string]bool // cookie value → signed in
 	table    *routes.Table
 
-	tenant          *tenant
-	staleSettings   map[string]any // the settings as read at start, for StaleSettings
-	stalePersistent bool
-	cauthy          *httptest.Server
-	adminToken      string
+	tenant        *tenant
+	staleSettings map[string]any // the settings as read at start, for StaleSettings
+	cauthy        *httptest.Server
+	adminToken    string
 
 	keysOnce sync.Once
 	keys     *keyring // what the fake Cauthy knows of CAUTHY_KEYs (keys.go)
@@ -151,7 +149,7 @@ const prefix = "/api/auth"
 func New(k Knobs) *Server {
 	s := &Server{Knobs: k, Email: "ana@example.com", Password: "correct horse battery staple", signedIn: map[string]bool{}, table: loadTable(),
 		tenant: newTenant()}
-	s.staleSettings, s.stalePersistent = s.tenant.snapshot()
+	s.staleSettings = s.tenant.snapshot()
 	s.Server = httptest.NewServer(http.HandlerFunc(s.handle))
 	s.appOrigin = s.URL
 	return s
@@ -172,34 +170,19 @@ func (s *Server) setting(k string) bool {
 		on, _ := s.staleSettings[k].(bool)
 		return on
 	}
-	now, _ := s.tenant.snapshot()
-	on, _ := now[k].(bool)
+	on, _ := s.tenant.snapshot()[k].(bool)
 	return on
 }
 
 // persistentAllowed says whether remember may make a long session: the knob,
-// or the backend's client in Cauthy.
+// or the workspace's persistent_sessions in Cauthy.
 func (s *Server) persistentAllowed() bool {
-	if s.Knobs.PersistentAllowed {
-		return true
-	}
-	if s.Knobs.StaleSettings {
-		return s.stalePersistent
-	}
-	_, p := s.tenant.snapshot()
-	return p
+	return s.Knobs.PersistentAllowed || s.setting("persistent_sessions")
 }
 
 // Setting answers a tenant setting as the fake Cauthy holds it, for tests.
 func (s *Server) Setting(k string) any {
-	now, _ := s.tenant.snapshot()
-	return now[k]
-}
-
-// ClientPersistent says whether the fake Cauthy lets the backend's client keep long sessions.
-func (s *Server) ClientPersistent() bool {
-	_, p := s.tenant.snapshot()
-	return p
+	return s.tenant.snapshot()[k]
 }
 
 // Accounts lists the addresses signed up and not deleted, for tests.
@@ -259,8 +242,7 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
 	route := r.Method + " " + r.URL.Path
 	switch {
 	case route == "GET /v1/settings/auth":
-		now, _ := t.snapshot()
-		data(200, now)
+		data(200, t.snapshot())
 	case route == "PUT /v1/settings/auth":
 		var change map[string]any
 		if json.NewDecoder(r.Body).Decode(&change) != nil {
@@ -284,27 +266,19 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
 		}
 		t.settings = next
 		t.mu.Unlock()
-		now, _ := t.snapshot()
-		data(200, now)
-	case route == "GET /v1/oauth/clients":
-		_, p := t.snapshot()
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"client_id": ClientID, "allow_persistent_sessions": p}}, "total_count": 1})
+		data(200, t.snapshot())
 	case route == "PATCH /v1/oauth/clients/"+ClientID:
-		var change struct {
-			AllowPersistentSessions *bool `json:"allow_persistent_sessions"`
-		}
+		// As Cauthy: "keep me signed in" is the workspace's, not a client's.
+		var change map[string]any
 		if json.NewDecoder(r.Body).Decode(&change) != nil {
 			refuse(400, "bad_request")
 			return
 		}
-		t.mu.Lock()
-		if change.AllowPersistentSessions != nil {
-			t.persistent = *change.AllowPersistentSessions
+		if _, moved := change["allow_persistent_sessions"]; moved {
+			refuse(400, "persistent_sessions_moved")
+			return
 		}
-		p := t.persistent
-		t.mu.Unlock()
-		data(200, map[string]any{"client_id": ClientID, "allow_persistent_sessions": p})
+		data(200, map[string]any{"client_id": ClientID})
 	case route == "GET /v1/users":
 		q := strings.ToLower(r.URL.Query().Get("q"))
 		t.mu.Lock()

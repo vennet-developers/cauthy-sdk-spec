@@ -15,16 +15,16 @@ func TestCleanupPutsTheTenantBack(t *testing.T) {
 	srv := fake.New(fake.Knobs{})
 	defer srv.Close()
 	base := srv.StartCauthy("admin-token")
-	c := &Ctx{Client: client.New(srv.Target(), srv.URL), Admin: admin.New(context.Background(), base, fake.Tenant, "admin-token", fake.ClientID)}
+	c := &Ctx{Client: client.New(srv.Target(), srv.URL), Admin: admin.New(context.Background(), base, fake.Tenant, "admin-token")}
 	if err := c.Admin.Set(map[string]any{"allow_signup": false}); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Admin.SetPersistent(true); err != nil {
+	if err := c.Admin.Set(map[string]any{"persistent_sessions": true}); err != nil {
 		t.Fatal(err)
 	}
 	c.Cleanup()
-	if srv.Setting("allow_signup") != true || srv.ClientPersistent() {
-		t.Fatalf("not put back: allow_signup=%v persistent=%v", srv.Setting("allow_signup"), srv.ClientPersistent())
+	if srv.Setting("allow_signup") != true || srv.Setting("persistent_sessions") != false {
+		t.Fatalf("not put back: allow_signup=%v persistent_sessions=%v", srv.Setting("allow_signup"), srv.Setting("persistent_sessions"))
 	}
 	c.Cleanup() // twice is safe
 }
@@ -34,7 +34,7 @@ func TestRunReportsATenantLeftChanged(t *testing.T) {
 	srv := fake.New(fake.Knobs{})
 	defer srv.Close()
 	base := srv.StartCauthy("admin-token")
-	c := &Ctx{Client: client.New(srv.Target(), srv.URL), Admin: admin.New(context.Background(), base, fake.Tenant, "admin-token", fake.ClientID)}
+	c := &Ctx{Client: client.New(srv.Target(), srv.URL), Admin: admin.New(context.Background(), base, fake.Tenant, "admin-token")}
 	reg := &Registry{}
 	reg.Add(Check{ID: "changes", Group: "switches", Level: Basic, Run: func(c *Ctx) Result {
 		if err := c.Admin.Set(map[string]any{"allow_signup": false}); err != nil {

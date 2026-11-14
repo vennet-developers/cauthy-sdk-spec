@@ -19,7 +19,7 @@ func setup(t *testing.T) (*fake.Server, *admin.Client) {
 	srv := fake.New(fake.Knobs{})
 	t.Cleanup(srv.Close)
 	base := srv.StartCauthy("s3cret-admin")
-	return srv, admin.New(context.Background(), base, fake.Tenant, "s3cret-admin", fake.ClientID)
+	return srv, admin.New(context.Background(), base, fake.Tenant, "s3cret-admin")
 }
 
 func TestSetChangesAndRestorePutsBack(t *testing.T) {
@@ -42,24 +42,6 @@ func TestSetChangesAndRestorePutsBack(t *testing.T) {
 	}
 }
 
-func TestSetPersistentAndRestore(t *testing.T) {
-	srv, a := setup(t)
-	if err := a.SetPersistent(true); err != nil {
-		t.Fatal(err)
-	}
-	if !srv.ClientPersistent() {
-		t.Fatal("not set")
-	}
-	a.Restore()
-	if srv.ClientPersistent() {
-		t.Fatal("not restored")
-	}
-	a.ClientID = ""
-	if err := a.SetPersistent(true); err == nil || !strings.Contains(err.Error(), "--client-id") {
-		t.Fatalf("want an error naming --client-id, got %v", err)
-	}
-}
-
 func TestRestoreDeletesTheAccountsMade(t *testing.T) {
 	srv, a := setup(t)
 	browser := client.New(srv.Target(), srv.URL)
@@ -79,7 +61,7 @@ func TestRestoreDeletesTheAccountsMade(t *testing.T) {
 
 func TestCauthysRefusalIsAnErrorWithoutTheToken(t *testing.T) {
 	_, good := setup(t)
-	a := admin.New(context.Background(), good.Base, fake.Tenant, "s3cret-wrong", fake.ClientID)
+	a := admin.New(context.Background(), good.Base, fake.Tenant, "s3cret-wrong")
 	err := a.Set(map[string]any{"allow_signup": false})
 	if err == nil || !strings.Contains(err.Error(), "401 unauthorized") || strings.Contains(err.Error(), "s3cret") {
 		t.Fatalf("%v", err)
@@ -116,7 +98,7 @@ func TestARateLimitedCallWaitsAndTriesAgain(t *testing.T) {
 		w.Write([]byte(`{"data":{"allow_signup":true}}`))
 	}))
 	defer srv.Close()
-	a := admin.New(context.Background(), srv.URL, "acme", "t", "")
+	a := admin.New(context.Background(), srv.URL, "acme", "t")
 	got, err := a.Settings()
 	if err != nil || got["allow_signup"] != true || n.Load() != 2 {
 		t.Fatalf("%v %v after %d calls", got, err, n.Load())
@@ -132,7 +114,7 @@ func TestARateLimitThatStaysIsAnError(t *testing.T) {
 		w.Write([]byte(`{"errors":[{"code":"rate_limited"}]}`))
 	}))
 	defer srv.Close()
-	a := admin.New(context.Background(), srv.URL, "acme", "t", "")
+	a := admin.New(context.Background(), srv.URL, "acme", "t")
 	if _, err := a.Settings(); err == nil || !strings.Contains(err.Error(), "429 rate_limited") || n.Load() != 3 {
 		t.Fatalf("%v after %d calls", err, n.Load())
 	}
@@ -145,7 +127,7 @@ func TestRestoreWorksAfterTheRunIsCanceled(t *testing.T) {
 	t.Cleanup(srv.Close)
 	base := srv.StartCauthy("s3cret-admin")
 	ctx, cancel := context.WithCancel(context.Background())
-	a := admin.New(ctx, base, fake.Tenant, "s3cret-admin", fake.ClientID)
+	a := admin.New(ctx, base, fake.Tenant, "s3cret-admin")
 	if err := a.Set(map[string]any{"allow_password": false, "allow_magic_link": true}); err != nil {
 		t.Fatal(err)
 	}

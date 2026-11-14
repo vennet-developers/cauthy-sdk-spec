@@ -18,7 +18,7 @@ func TestSwitchSettingsAreInThePublicAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for op, schema := range map[string]string{"PUT /v1/settings/auth": "UpdateAuthSettingsRequest", "PATCH /v1/oauth/clients/{client_id}": "OAuthClientUpdateRequest"} {
+	for op, schema := range map[string]string{"PUT /v1/settings/auth": "UpdateAuthSettingsRequest"} {
 		if doc.Ops[op] == nil {
 			t.Errorf("the public API lacks %s", op)
 		}
@@ -31,10 +31,7 @@ func TestSwitchSettingsAreInThePublicAPI(t *testing.T) {
 			t.Errorf("UpdateAuthSettingsRequest has no %s", k)
 		}
 	}
-	if doc.Schemas["OAuthClientUpdateRequest"].Properties["allow_persistent_sessions"] == nil {
-		t.Error("OAuthClientUpdateRequest has no allow_persistent_sessions")
-	}
-	for _, op := range []string{"GET /v1/settings/auth", "GET /v1/oauth/clients", "GET /v1/users", "DELETE /v1/users/{id}"} {
+	for _, op := range []string{"GET /v1/settings/auth", "GET /v1/users", "DELETE /v1/users/{id}"} {
 		if doc.Ops[op] == nil {
 			t.Errorf("the public API lacks %s, which the switch checks call", op)
 		}

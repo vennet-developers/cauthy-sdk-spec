@@ -38,10 +38,12 @@ type Options struct {
 
 	// The dashboard-switch checks change the tenant's settings in Cauthy and
 	// put them back. Without Cauthy they skip (and level switches is refused).
-	Cauthy     string        // Cauthy's address, e.g. http://localhost:8080
-	Tenant     string        // the backend's workspace slug
-	AdminToken string        // a token with settings:manage, oauth_clients:manage, users:manage and users:delete; never printed
-	ClientID   string        // the backend's OAuth client, for the persistent-sessions switch; "" skips that one
+	Cauthy     string // Cauthy's address, e.g. http://localhost:8080
+	Tenant     string // the backend's workspace slug
+	AdminToken string // a token with settings:manage, users:manage and users:delete; never printed
+	// Deprecated: ignored. "Keep me signed in" is the workspace's
+	// persistent_sessions now, so no switch needs the backend's client.
+	ClientID   string
 	SwitchWait time.Duration // how long the backend has to follow a switch; 0 is 10 s
 
 	// Key is the CAUTHY_KEY the backend runs on. When set, the key.* checks
@@ -160,7 +162,7 @@ func Run(ctx context.Context, o Options) (Outcome, error) {
 	c := &check.Ctx{Client: client.NewContext(ctx, o.Target, o.Origin), Table: table, Email: o.Email, Password: o.Password,
 		SwitchWait: o.SwitchWait, Key: o.Key, Cauthy: o.Cauthy}
 	if o.Cauthy != "" {
-		c.Admin = admin.New(ctx, o.Cauthy, o.Tenant, o.AdminToken, o.ClientID)
+		c.Admin = admin.New(ctx, o.Cauthy, o.Tenant, o.AdminToken)
 	}
 	reg := &check.Registry{}
 	checks.RegisterAll(reg)
