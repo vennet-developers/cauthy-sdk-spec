@@ -34,7 +34,6 @@ type Options struct {
 	Email    string // a password account in the backend's tenant; "" skips the signed-in checks
 	Password string
 	Level    string // Basic (default), Strict or Switches
-	JWKSPath string // contract mode: the JWKS path the backend serves; "" otherwise
 	Table    []byte // a route table instead of the embedded one; nil for the embedded
 
 	// The dashboard-switch checks change the tenant's settings in Cauthy and
@@ -69,8 +68,8 @@ func (o Options) String() string {
 	if o.Key != "" {
 		key = "[hidden]"
 	}
-	return fmt.Sprintf("{Target:%s Origin:%s Email:%s Password:%s Level:%s JWKSPath:%s Table:%s Cauthy:%s Tenant:%s AdminToken:%s ClientID:%s SwitchWait:%s Key:%s}",
-		o.Target, o.Origin, o.Email, pw, o.Level, o.JWKSPath, table, o.Cauthy, o.Tenant, token, o.ClientID, o.SwitchWait, key)
+	return fmt.Sprintf("{Target:%s Origin:%s Email:%s Password:%s Level:%s Table:%s Cauthy:%s Tenant:%s AdminToken:%s ClientID:%s SwitchWait:%s Key:%s}",
+		o.Target, o.Origin, o.Email, pw, o.Level, table, o.Cauthy, o.Tenant, token, o.ClientID, o.SwitchWait, key)
 }
 
 // GoString keeps %#v from printing the password too.
@@ -158,7 +157,7 @@ func Run(ctx context.Context, o Options) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, usagef("the route table: %v", err)
 	}
-	c := &check.Ctx{Client: client.NewContext(ctx, o.Target, o.Origin), Table: table, Email: o.Email, Password: o.Password, JWKSPath: o.JWKSPath,
+	c := &check.Ctx{Client: client.NewContext(ctx, o.Target, o.Origin), Table: table, Email: o.Email, Password: o.Password,
 		SwitchWait: o.SwitchWait, Key: o.Key, Cauthy: o.Cauthy}
 	if o.Cauthy != "" {
 		c.Admin = admin.New(ctx, o.Cauthy, o.Tenant, o.AdminToken, o.ClientID)

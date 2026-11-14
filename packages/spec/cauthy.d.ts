@@ -1619,29 +1619,9 @@ export interface paths {
         };
         /**
          * Who the calling application is (CAUTHY_KEY)
-         * @description Asked by an application with its own token (the `client_credentials` token it gets with its `CAUTHY_KEY` assertion, the same token it sends as `X-Cauthy-System-Token`): its workspace, its system, its client and the client people sign in through, the origins of its registered return addresses (development first), the return path, the key it last proved itself with, and its contract when a link of the contracts graph names it. `X-Tenant-Key` is optional with a system's token. Cacheable for five minutes (`Cache-Control: private, max-age=300`) and revalidated with its `ETag` (`If-None-Match` answers 304). Nothing in it is secret.
+         * @description Asked by an application with its own token (the `client_credentials` token it gets with its `CAUTHY_KEY` assertion, the same token it sends as `X-Cauthy-System-Token`): its workspace, its system, its client and the client people sign in through, the origins of its registered return addresses (development first), the return path and the key it last proved itself with. `X-Tenant-Key` is optional with a system's token. Cacheable for five minutes (`Cache-Control: private, max-age=300`) and revalidated with its `ETag` (`If-None-Match` answers 304). Nothing in it is secret.
          */
         get: operations["getConnectSelf"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/pact/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * How the workspace's contracted systems stand against their contracts
-         * @description Checked now, against the contracts graph as Cauthy applied it: what the contract says, what Cauthy holds, what is outside the contract and what is missing. Nothing is changed by checking. With `system`, that system alone (`{"data": …}`); without it, every system a link names in this workspace (`{"data": [...], "total_count": n}`). A system's own token always gets its own system. Requires `oauth_clients:manage`, or a system's own token.
-         */
-        get: operations["getPactStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1705,7 +1685,7 @@ export interface paths {
         head?: never;
         /**
          * Update an OAuth client
-         * @description Changes the name, roles, scopes or the application's address. A field left out is left as it is. Requires `oauth_clients:manage`.
+         * @description Changes the name, roles, scopes, the application's address, or what protects the sign-ins through it (`system_proof`, `require_verified_email`). A field left out is left as it is. Every change is audited (`oauth.client.updated`, with `before` and `after` when the protection changed); one that asks less than before emails the workspace's admins. Requires `oauth_clients:manage`.
          */
         patch: operations["updateOAuthClient"];
         trace?: never;
@@ -2663,6 +2643,8 @@ export interface components {
             allow_signup?: boolean;
             confirm_email?: boolean;
             mfa_required?: boolean;
+            /** @description People may choose "keep me signed in" (30 days without use, 90 in all) on every application of the workspace. Off, a session ends with the browser or after 12 hours. */
+            persistent_sessions?: boolean;
             /** @description Days an unconfirmed account may sign in before confirming. */
             verify_grace_days?: number;
             allow_manual_linking?: boolean;
@@ -2716,6 +2698,8 @@ export interface components {
             passkey_domain?: string;
             allow_anonymous?: boolean;
             mfa_required?: boolean;
+            /** @description Lets people choose "keep me signed in" on every application of the workspace. Turning it off cuts no session already made: each ends at its own time. */
+            persistent_sessions?: boolean;
             anonymous_ttl_days?: number;
             /** @description Turnstile site key; empty turns CAPTCHA off. */
             captcha_site_key?: string;
@@ -2804,7 +2788,7 @@ export interface components {
             system: string;
             /** @description The client the key authenticates. */
             client_id: string;
-            /** @description The client people sign in through (`pact.<link>` with a contract; else `client_id`). */
+            /** @description The client people sign in through (for an application's own identity that signs nobody in itself, its paired sign-in client; else `client_id`). */
             sign_in_client_id: string;
             /** @description The origins of the sign-in client's return addresses, in registration order. */
             app_urls: string[];
@@ -2816,106 +2800,6 @@ export interface components {
                 /** Format: date-time */
                 retires_at?: string | null;
             } | null;
-            /** @description The application's contract, when a link of the contracts graph names it. */
-            contract?: {
-                link?: string;
-                /** @enum {string} */
-                system_proof?: "off" | "auto" | "required";
-                require_verified_email?: boolean;
-                in_step?: boolean;
-                /** Format: date-time */
-                checked_at?: string | null;
-            } | null;
-        };
-        /** @description How one contracted system stands against its contract, checked now. */
-        PactStatus: {
-            system: string;
-            /** Format: uuid */
-            tenant_id: string;
-            /** Format: date-time */
-            checked_at: string;
-            /** @description Nothing is outside the contract and nothing is missing. */
-            in_step: boolean;
-            contract: components["schemas"]["PactContract"];
-            held: components["schemas"]["PactHeld"];
-            /** @description What Cauthy holds that the contract does not name. */
-            outside: components["schemas"]["PactItem"][];
-            /** @description What the contract names that Cauthy does not hold as it says. */
-            missing: components["schemas"]["PactItem"][];
-            /**
-             * Format: date-time
-             * @description When the daily reconciliation last checked this system; null before the first.
-             */
-            reconciled_at: string | null;
-            keys?: components["schemas"]["PactKeys"];
-        };
-        /** @description The CAUTHY_KEY of the system's service client: the kids registered on it and the EdDSA kids published at its jwks_url (the key set last read). Absent while the client has no registered key (RS256 keys only). A kid on one side only is also a `key` item of `missing` or `outside`. */
-        PactKeys: {
-            registered?: string[];
-            published?: string[];
-            /** @description Registered, not published, so the application is not deployed with the key. */
-            missing?: string[];
-            /** @description Published, not registered. */
-            outside?: string[];
-            matches?: boolean;
-        };
-        PactContract: {
-            clients: components["schemas"]["PactContractClient"][];
-            /** @description Roles by kind of organization, as the system's manifest lists them; absent when it lists none. */
-            roles?: {
-                [key: string]: string[];
-            };
-        };
-        PactContractClient: {
-            client_id: string;
-            link: string;
-            /** @enum {string} */
-            purpose: "sign_in" | "service";
-            redirect_uris?: string[];
-            grant_types: string[];
-            require_system_proof?: boolean;
-            /** @enum {string} */
-            system_proof?: "off" | "auto" | "required";
-            require_verified_email?: boolean;
-            persistent_sessions?: boolean;
-            jwks_url?: string;
-        };
-        PactHeld: {
-            clients: components["schemas"]["PactHeldClient"][];
-            roles: string[];
-            /** @description Active organizations by kind. */
-            organizations: {
-                [key: string]: number;
-            };
-        };
-        PactHeldClient: {
-            client_id: string;
-            name: string;
-            /** @description The sign-in link it came from. */
-            link?: string;
-            /** @description The service link it came from. */
-            service_link?: string;
-            /** @description The system it is the identity of. */
-            system?: string;
-            redirect_uris: string[];
-            grant_types: string[];
-            require_system_proof: boolean;
-            system_proof_auto: boolean;
-            /** Format: date-time */
-            system_proof_required_at?: string;
-            require_verified_email: boolean;
-            persistent_sessions: boolean;
-            jwks_url?: string;
-            active: boolean;
-        };
-        /** @description One difference between the contract and what Cauthy holds. */
-        PactItem: {
-            /** @description What differs: client, redirect_uri, grant_type, role, organization, require_system_proof, system_proof, system_proof_required_at, require_verified_email, persistent_sessions, jwks_url or key. */
-            kind: string;
-            /** @description The client it is on, when it is on one. */
-            client_id?: string;
-            value: string;
-            detail?: string;
         };
         WorkspaceUser: {
             /** Format: uuid */
@@ -3234,7 +3118,7 @@ export interface components {
             captcha_site_key?: string;
             captcha_enabled?: boolean;
             phone_channels?: ("sms" | "whatsapp")[];
-            /** @description When the request names an application (`X-Cauthy-Client-Id`), whether it lets people stay signed in. A sign-in screen shows its "keep me signed in" box only when true. */
+            /** @description Whether the workspace lets people stay signed in. A sign-in screen shows its "keep me signed in" box only when true. */
             persistent_sessions?: boolean;
             allow_anonymous?: boolean;
             anonymous_ttl_days?: number;
@@ -3814,8 +3698,18 @@ export interface components {
             system?: string;
             jwks_uri?: string;
             system_import?: boolean;
-            /** @description Whether people signing in through this client may choose "keep me signed in". A contract link that sets `sign_in.persistent_sessions` owns it. */
-            allow_persistent_sessions?: boolean;
+            /**
+             * @description Whether only the application's own server may sign people in through the client: every sign-in must carry its system's proof (`X-Cauthy-System-Token`), so a copied client id is useless on its own. `auto` turns into a requirement after the first sign-in that carried it.
+             * @enum {string}
+             */
+            system_proof?: "off" | "auto" | "required";
+            /** @description No token is issued through the client to a person whose email is unconfirmed. */
+            require_verified_email?: boolean;
+            /**
+             * Format: date-time
+             * @description Under `auto`, when the first sign-in that carried the proof turned it on. Absent until then.
+             */
+            system_proof_required_at?: string;
         };
         OAuthClientUpdateRequest: {
             /** @description Cannot be empty. */
@@ -3827,8 +3721,18 @@ export interface components {
              * @example https://app.example.com
              */
             app_url?: string;
-            /** @description Lets this client's people stay signed in (30 days without use, 90 in all) when they ask. A client a contract link owns answers `409 from_contract`. */
+            /**
+             * @deprecated
+             * @description No longer a client's: refused with `400 persistent_sessions_moved`. "Keep me signed in" is the workspace's `persistent_sessions` (`PUT /v1/settings/auth`).
+             */
             allow_persistent_sessions?: boolean;
+            /**
+             * @description Only the application's own server may sign people in through the client. `auto` waits for the first sign-in that carries the proof and then requires it; `required` requires it at once; `off` turns it off. Turning it on needs an application that proves itself with its key (`400 system_proof_needs_key`). Turning it off emails the workspace's admins.
+             * @enum {string}
+             */
+            system_proof?: "off" | "auto" | "required";
+            /** @description No token to a person whose email is unconfirmed. Turning it off emails the workspace's admins. */
+            require_verified_email?: boolean;
         };
         OAuthThemeFont: {
             family: string;
@@ -8724,73 +8628,6 @@ export interface operations {
             };
         };
     };
-    getPactStatus: {
-        parameters: {
-            query?: {
-                /** @description Only this system (forced to the token's own system for a system token). */
-                system?: string;
-            };
-            header?: {
-                /** @description Tenant slug. May be left out when the request carries a system's own token, which names its tenant. */
-                "X-Tenant-Key"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description One system's status, or every contracted system's */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["PactStatus"];
-                    } | {
-                        data: components["schemas"]["PactStatus"][];
-                        total_count: number;
-                    };
-                };
-            };
-            /** @description `unauthorized` (no or invalid token), `token_revoked` */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description `forbidden`: the caller lacks `oauth_clients:manage`; `other_system`: a system's token asked for another system */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description `not_contracted`: no link of the contracts repository names this system in this workspace */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description `internal_error` */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
     oauthAuthorize: {
         parameters: {
             query: {
@@ -8951,7 +8788,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description `bad_request` (not JSON) or `validation_error`: an empty name, or an `app_url` that is no application address (`invalid`) or would turn development into production or back (`kind_changed`). */
+            /** @description `bad_request` (not JSON); `validation_error`: an empty name, or an `app_url` that is no application address (`invalid`) or would turn development into production or back (`kind_changed`), or a `system_proof` that is not `off`, `auto` or `required` (`invalid`); `persistent_sessions_moved`: the body sets `allow_persistent_sessions`, now the workspace's `persistent_sessions`; `system_proof_needs_key`: `system_proof` turned on for an application that does not prove itself with its key. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9051,15 +8888,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description `from_contract`: a contract's sign-in client; keys go on its service client. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
         };
     };
     addOAuthClientKey: {
@@ -9128,7 +8956,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description `key_in_use` (the key is already an application's of the workspace); `from_contract` (a contract's sign-in client). */
+            /** @description `key_in_use` (the key is already an application's of the workspace). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9199,15 +9027,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description `from_contract`: a contract's sign-in client. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
         };
     };
     removeOAuthClientSecret: {
@@ -9259,7 +9078,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description `no_key`: register a key first, since removing the secret would lock the application out; `from_contract`. */
+            /** @description `no_key`: register a key first, since removing the secret would lock the application out. */
             409: {
                 headers: {
                     [name: string]: unknown;

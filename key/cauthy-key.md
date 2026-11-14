@@ -45,11 +45,10 @@ HKDF-SHA-256 (RFC 5869), salt empty, input key material the UTF-8 bytes of the
 | --- | --- |
 | `pact/cookie/v1` | seals the session cookie (JWE `dir`, `A256GCM`) |
 | `pact/flow/v1` | seals what a sign-in carries between its steps |
-| `pact/seal/v1` | reserved; nothing is sealed with it in key mode |
 | `cauthy/sign/v1` | the Ed25519 seed (RFC 8032 §5.1.5) |
 
-The first three are the derivation of `contract/pact.md` with the `SECRET`
-segment as the root key, so one routine serves both.
+The `pact/` prefix of the first two is historical and stays: changing a label
+would leave every sealed cookie and sign-in unreadable.
 
 ## 5. The signing key
 
@@ -73,16 +72,26 @@ key mode.
 
 ## 7. Who the application is
 
-Without a contract, the application asks once at start, and every 5 minutes
-after with `If-None-Match`:
+The application asks once at start, and every 5 minutes after with
+`If-None-Match`:
 
 1. `POST <issuer>/v1/oauth/token` `grant_type=client_credentials` with the assertion → its access token.
 2. `GET <issuer>/v1/connect/self` with `Authorization: Bearer <that token>` →
    `{data: {issuer, audience, tenant: {id, slug}, system, client_id,
-   sign_in_client_id, app_urls[], callback_path, key: {kid, retires_at},
-   contract}}`.
+   sign_in_client_id, app_urls[], callback_path, key: {kid, retires_at}}}`.
 
 The same access token is the system proof (`X-Cauthy-System-Token`).
+
+`sign_in_client_id` is the client people sign in through. It is usually
+`client_id`. When it names another client (an application whose key is on a
+system identity that signs nobody in itself, such as one once connected by a
+contract), the backend uses it for every person's call to
+`<issuer>/v1/oauth/authorize`, `/token` and `/revoke`, as a public client:
+PKCE (S256), no client assertion and no secret, and the code exchange carries
+`X-Cauthy-System-Token`. The assertion (§6) always names the key's own client
+and is used only for its own token. A refresh token belongs to the client it
+was issued to, so the backend waits for Cauthy's answer before refreshing or
+exchanging a code rather than guess the client.
 
 The redirect URI is `<origin><basePath>/callback` with `origin` the request's
 origin when it is in `app_urls`; else the only entry when there is one; else
@@ -92,23 +101,41 @@ When Cauthy is unreachable the backend starts and answers `503 unavailable` on
 its auth routes until the identity arrives. When Cauthy refuses the key
 (`invalid_client`) it answers `503 misconfigured` and logs the `kid` once.
 
-## 8. With a contract
+## 8. Protecting sign-in
 
-See `contract/pact.md`. The issuer must be the graph's Cauthy `url`
-(`key_contract_issuer`). The key authenticates the link's service client and
-the backend publishes the public key at the contract's `jwks_url`.
+Two switches per application, set in Cauthy's dashboard (or with
+`PATCH /v1/oauth/clients/{client_id}`, permission `oauth_clients:manage`), on
+the client people sign in through. The application reads neither: Cauthy
+enforces them, and a change applies with no deploy.
+
+| Field | Values | Effect |
+| --- | --- | --- |
+| `system_proof` | `off`, `auto`, `required` | `required`: a code exchange through the client, and every sign-in the application's own screens make naming it, is refused without a valid system proof (`403 system_proof_required`), so a copied client id is useless on its own. `auto`: becomes `required` by itself after the first sign-in that carried the proof (`system_proof_required_at` says when). Turning it on needs an application that proves itself with its key (`400 system_proof_needs_key`) |
+| `require_verified_email` | `true`, `false` | No token is issued through the client to a person whose email is unconfirmed |
+
+Turning either off emails the workspace's admins. The system proof is the
+access token of §7, sent as `X-Cauthy-System-Token` on every call the backend
+passes to Cauthy on behalf of a person. Cauthy accepts it when it is valid, of
+the same workspace, and belongs to the system that owns the client the call
+names; without it Cauthy ignores the person's address the backend passes on
+(`X-Cauthy-Client-IP`). An SDK always sends it, whatever the switch says.
 
 ## 9. Rotation
 
 `CAUTHY_KEY_PREVIOUS` is the key being replaced. It must name the same issuer
 and client (`key_previous_mismatch`). Its cookie and flow keys are read, never
-written; with a contract its public key is published too. Signing always uses
-`CAUTHY_KEY`.
+written. Signing always uses `CAUTHY_KEY`.
 
 ## 10. Variables refused beside it
 
 `CAUTHY_ISSUER`, `CAUTHY_CLIENT_ID`, `CAUTHY_CLIENT_SECRET`, `CAUTHY_SYSTEM`,
 `CAUTHY_TENANT`, `CAUTHY_SYSTEM_KEY`, `CAUTHY_SYSTEM_KEY_ID`, `CAUTHY_BASE_URL`,
-`CAUTHY_AUDIENCE`, `CAUTHY_TENANT_ID`. `CAUTHY_SECRET` and `PACT_ROOT_KEY` are
-accepted beside it only as read-only previous keys while an application moves
-to `CAUTHY_KEY` (with one warning); in 2.0 they are refused too.
+`CAUTHY_AUDIENCE`, `CAUTHY_TENANT_ID`. `CAUTHY_SECRET` is accepted beside it
+only as a read-only previous key while an application moves to `CAUTHY_KEY`
+(with one warning); in 2.0 it is refused too.
+
+Contracts (Pact) are retired. An SDK from 1.3.0 refuses to start when
+`PACT_ROOT_KEY` or `PACT_ROOT_KEY_PREVIOUS` is set, whether or not
+`CAUTHY_KEY` is, and takes no contract option. The error says to run on
+`CAUTHY_KEY` alone. It reads no contracts graph, serves no JWKS of its own,
+and never calls `/v1/pact/status`, which Cauthy no longer serves.

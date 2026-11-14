@@ -518,7 +518,7 @@ probes:
     params: {id: "{member_org_id}"}
     expect: 204
 
-  # ── The owner: settings, clients, Pact, webhooks, agents, people ───────
+  # ── The owner: settings, clients, webhooks, agents, people ─────────────
   - id: settings
     op: GET /v1/settings/auth
     auth: owner_token
@@ -564,10 +564,6 @@ probes:
     auth: owner_token
     params: {client_id: "api-check-{run}"}
     expect: 404
-  - id: pact-status
-    op: GET /v1/pact/status
-    auth: owner_token
-    expect: 200
   - id: webhooks
     op: GET /v1/webhooks
     auth: owner_token

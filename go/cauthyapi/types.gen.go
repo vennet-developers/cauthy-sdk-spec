@@ -210,7 +210,7 @@ type ConnectSelf struct {
 	System   string            `json:"system"`
 	// The client the key authenticates.
 	ClientID string `json:"client_id"`
-	// The client people sign in through (`pact.<link>` with a contract; else `client_id`).
+	// The client people sign in through (for an application's own identity that signs nobody in itself, its paired sign-in client; else `client_id`).
 	SignInClientID string `json:"sign_in_client_id"`
 	// The origins of the sign-in client's return addresses, in registration order.
 	AppURLs []string `json:"app_urls"`
@@ -218,17 +218,6 @@ type ConnectSelf struct {
 	CallbackPath string `json:"callback_path"`
 	// The key the application last signed an assertion with.
 	Key *ConnectSelfKey `json:"key,omitempty"`
-	// The application's contract, when a link of the contracts graph names it.
-	Contract *ConnectSelfContract `json:"contract,omitempty"`
-}
-
-// The application's contract, when a link of the contracts graph names it.
-type ConnectSelfContract struct {
-	Link                 *string `json:"link,omitempty"`
-	SystemProof          *string `json:"system_proof,omitempty"`
-	RequireVerifiedEmail *bool   `json:"require_verified_email,omitempty"`
-	InStep               *bool   `json:"in_step,omitempty"`
-	CheckedAt            *string `json:"checked_at,omitempty"`
 }
 
 // The key the application last signed an assertion with.
@@ -674,8 +663,12 @@ type OAuthClient struct {
 	System       *string `json:"system,omitempty"`
 	JWKSURI      *string `json:"jwks_uri,omitempty"`
 	SystemImport *bool   `json:"system_import,omitempty"`
-	// Whether people signing in through this client may choose "keep me signed in". A contract link that sets `sign_in.persistent_sessions` owns it.
-	AllowPersistentSessions *bool `json:"allow_persistent_sessions,omitempty"`
+	// Whether only the application's own server may sign people in through the client: every sign-in must carry its system's proof (`X-Cauthy-System-Token`), so a copied client id is useless on its own. `auto` turns into a requirement after the first sign-in that carried it.
+	SystemProof *string `json:"system_proof,omitempty"`
+	// No token is issued through the client to a person whose email is unconfirmed.
+	RequireVerifiedEmail *bool `json:"require_verified_email,omitempty"`
+	// Under `auto`, when the first sign-in that carried the proof turned it on. Absent until then.
+	SystemProofRequiredAt *string `json:"system_proof_required_at,omitempty"`
 }
 
 // How an application looks on Cauthy's hosted pages. Every field is optional; one left out keeps Cauthy's look. Colours: #rgb, #rrggbb, #rrggbbaa, rgb(…) or rgba(…).
@@ -728,8 +721,12 @@ type OAuthClientUpdateRequest struct {
 	Scopes []string `json:"scopes,omitempty"`
 	// The application's address (https://…, or http://localhost while developing, no path). The client's return addresses move to it, keeping their paths; its id and secret stay. A development address stays a development one and production stays production (`kind_changed`).
 	AppURL *string `json:"app_url,omitempty"`
-	// Lets this client's people stay signed in (30 days without use, 90 in all) when they ask. A client a contract link owns answers `409 from_contract`.
+	// No longer a client's: refused with `400 persistent_sessions_moved`. "Keep me signed in" is the workspace's `persistent_sessions` (`PUT /v1/settings/auth`).
 	AllowPersistentSessions *bool `json:"allow_persistent_sessions,omitempty"`
+	// Only the application's own server may sign people in through the client. `auto` waits for the first sign-in that carries the proof and then requires it; `required` requires it at once; `off` turns it off. Turning it on needs an application that proves itself with its key (`400 system_proof_needs_key`). Turning it off emails the workspace's admins.
+	SystemProof *string `json:"system_proof,omitempty"`
+	// No token to a person whose email is unconfirmed. Turning it off emails the workspace's admins.
+	RequireVerifiedEmail *bool `json:"require_verified_email,omitempty"`
 }
 
 type OAuthIntrospection struct {
@@ -894,91 +891,6 @@ type OrganizationMembership struct {
 	Conditional []ConditionalPermission `json:"conditional,omitempty"`
 }
 
-type PactContract struct {
-	Clients []PactContractClient `json:"clients"`
-	// Roles by kind of organization, as the system's manifest lists them; absent when it lists none.
-	Roles map[string][]string `json:"roles,omitempty"`
-}
-
-type PactContractClient struct {
-	ClientID             string   `json:"client_id"`
-	Link                 string   `json:"link"`
-	Purpose              string   `json:"purpose"`
-	RedirectURIs         []string `json:"redirect_uris,omitempty"`
-	GrantTypes           []string `json:"grant_types"`
-	RequireSystemProof   *bool    `json:"require_system_proof,omitempty"`
-	SystemProof          *string  `json:"system_proof,omitempty"`
-	RequireVerifiedEmail *bool    `json:"require_verified_email,omitempty"`
-	PersistentSessions   *bool    `json:"persistent_sessions,omitempty"`
-	JWKSURL              *string  `json:"jwks_url,omitempty"`
-}
-
-type PactHeld struct {
-	Clients []PactHeldClient `json:"clients"`
-	Roles   []string         `json:"roles"`
-	// Active organizations by kind.
-	Organizations map[string]int64 `json:"organizations"`
-}
-
-type PactHeldClient struct {
-	ClientID string `json:"client_id"`
-	Name     string `json:"name"`
-	// The sign-in link it came from.
-	Link *string `json:"link,omitempty"`
-	// The service link it came from.
-	ServiceLink *string `json:"service_link,omitempty"`
-	// The system it is the identity of.
-	System                *string  `json:"system,omitempty"`
-	RedirectURIs          []string `json:"redirect_uris"`
-	GrantTypes            []string `json:"grant_types"`
-	RequireSystemProof    bool     `json:"require_system_proof"`
-	SystemProofAuto       bool     `json:"system_proof_auto"`
-	SystemProofRequiredAt *string  `json:"system_proof_required_at,omitempty"`
-	RequireVerifiedEmail  bool     `json:"require_verified_email"`
-	PersistentSessions    bool     `json:"persistent_sessions"`
-	JWKSURL               *string  `json:"jwks_url,omitempty"`
-	Active                bool     `json:"active"`
-}
-
-// One difference between the contract and what Cauthy holds.
-type PactItem struct {
-	// What differs: client, redirect_uri, grant_type, role, organization, require_system_proof, system_proof, system_proof_required_at, require_verified_email, persistent_sessions, jwks_url or key.
-	Kind string `json:"kind"`
-	// The client it is on, when it is on one.
-	ClientID *string `json:"client_id,omitempty"`
-	Value    string  `json:"value"`
-	Detail   *string `json:"detail,omitempty"`
-}
-
-// The CAUTHY_KEY of the system's service client: the kids registered on it and the EdDSA kids published at its jwks_url (the key set last read). Absent while the client has no registered key (RS256 keys only). A kid on one side only is also a `key` item of `missing` or `outside`.
-type PactKeys struct {
-	Registered []string `json:"registered,omitempty"`
-	Published  []string `json:"published,omitempty"`
-	// Registered, not published, so the application is not deployed with the key.
-	Missing []string `json:"missing,omitempty"`
-	// Published, not registered.
-	Outside []string `json:"outside,omitempty"`
-	Matches *bool    `json:"matches,omitempty"`
-}
-
-// How one contracted system stands against its contract, checked now.
-type PactStatus struct {
-	System    string `json:"system"`
-	TenantID  string `json:"tenant_id"`
-	CheckedAt string `json:"checked_at"`
-	// Nothing is outside the contract and nothing is missing.
-	InStep   bool         `json:"in_step"`
-	Contract PactContract `json:"contract"`
-	Held     PactHeld     `json:"held"`
-	// What Cauthy holds that the contract does not name.
-	Outside []PactItem `json:"outside"`
-	// What the contract names that Cauthy does not hold as it says.
-	Missing []PactItem `json:"missing"`
-	// When the daily reconciliation last checked this system; null before the first.
-	ReconciledAt *string   `json:"reconciled_at"`
-	Keys         *PactKeys `json:"keys,omitempty"`
-}
-
 type PasskeyPlace struct {
 	// The relying-party id (the passkey domain).
 	RpID *string `json:"rp_id,omitempty"`
@@ -1061,7 +973,7 @@ type PublicAuthSettings struct {
 	CaptchaSiteKey *string  `json:"captcha_site_key,omitempty"`
 	CaptchaEnabled *bool    `json:"captcha_enabled,omitempty"`
 	PhoneChannels  []string `json:"phone_channels,omitempty"`
-	// When the request names an application (`X-Cauthy-Client-Id`), whether it lets people stay signed in. A sign-in screen shows its "keep me signed in" box only when true.
+	// Whether the workspace lets people stay signed in. A sign-in screen shows its "keep me signed in" box only when true.
 	PersistentSessions *bool  `json:"persistent_sessions,omitempty"`
 	AllowAnonymous     *bool  `json:"allow_anonymous,omitempty"`
 	AnonymousTTLDays   *int64 `json:"anonymous_ttl_days,omitempty"`
@@ -1260,10 +1172,12 @@ type UpdateAuthSettingsRequest struct {
 	// Codes by SMS and WhatsApp are offered (with a Twilio account). Off, no code is sent (`POST /v1/auth/mfa/send` and `POST /v1/auth/mfa/phone` answer `phone_disabled`, 403), phones are not offered for the second step, and the Twilio account stays stored. Default true.
 	AllowPhone *bool `json:"allow_phone,omitempty"`
 	// A bare domain like `example.com`; empty restores the default.
-	PasskeyDomain    *string `json:"passkey_domain,omitempty"`
-	AllowAnonymous   *bool   `json:"allow_anonymous,omitempty"`
-	MFARequired      *bool   `json:"mfa_required,omitempty"`
-	AnonymousTTLDays *int64  `json:"anonymous_ttl_days,omitempty"`
+	PasskeyDomain  *string `json:"passkey_domain,omitempty"`
+	AllowAnonymous *bool   `json:"allow_anonymous,omitempty"`
+	MFARequired    *bool   `json:"mfa_required,omitempty"`
+	// Lets people choose "keep me signed in" on every application of the workspace. Turning it off cuts no session already made: each ends at its own time.
+	PersistentSessions *bool  `json:"persistent_sessions,omitempty"`
+	AnonymousTTLDays   *int64 `json:"anonymous_ttl_days,omitempty"`
 	// Turnstile site key; empty turns CAPTCHA off.
 	CaptchaSiteKey *string `json:"captcha_site_key,omitempty"`
 	// Turnstile secret key; needed with a new site key.
@@ -1356,6 +1270,8 @@ type WorkspaceAuthSettings struct {
 	AllowSignup    *bool           `json:"allow_signup,omitempty"`
 	ConfirmEmail   *bool           `json:"confirm_email,omitempty"`
 	MFARequired    *bool           `json:"mfa_required,omitempty"`
+	// People may choose "keep me signed in" (30 days without use, 90 in all) on every application of the workspace. Off, a session ends with the browser or after 12 hours.
+	PersistentSessions *bool `json:"persistent_sessions,omitempty"`
 	// Days an unconfirmed account may sign in before confirming.
 	VerifyGraceDays    *int64 `json:"verify_grace_days,omitempty"`
 	AllowManualLinking *bool  `json:"allow_manual_linking,omitempty"`

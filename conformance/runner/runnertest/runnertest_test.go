@@ -33,7 +33,7 @@ func TestTheBackendPassesTheKeyChecks(t *testing.T) {
 	if err != nil || !out.Passed || !out.Complete {
 		t.Fatalf("%v\n%s", err, out.Text)
 	}
-	for _, id := range []string{"key.parses", "key.identity", "key.signs_in", "key.jwks"} {
+	for _, id := range []string{"key.parses", "key.identity", "key.signs_in"} {
 		if !strings.Contains(out.Text, id) {
 			t.Errorf("no %s in the report:\n%s", id, out.Text)
 		}

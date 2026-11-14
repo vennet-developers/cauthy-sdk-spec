@@ -29,8 +29,8 @@ type Config struct {
 	// client_credentials grant) through, for a backend that serves machines.
 	// Off by default.
 	AllowClientTokens bool
-	// ClientID is the client this backend signs people in through (in
-	// contract mode, the link's sign-in client). When set, a token whose azp
+	// ClientID is the client this backend signs people in through (the
+	// sign_in_client_id GET /v1/connect/self answers). When set, a token whose azp
 	// names another client is refused. Empty by default: azp is not checked.
 	ClientID string
 	// Leeway is the clock tolerance: nil means DefaultLeeway, a pointer to

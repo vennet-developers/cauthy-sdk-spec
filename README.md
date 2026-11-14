@@ -15,7 +15,6 @@ The specification behind every Cauthy SDK, and the suite that proves an SDK foll
 | `identity/rules.md` | What a token guarantees and what an application must never assume |
 | `verification/rules.md` | What a backend checks on a Cauthy access token, and the closed list of reason codes |
 | `vectors/` | Signed test tokens and the verdict every verifier must reach, generated from test-only keys |
-| `contract/pact.md` | How an SDK reads a Pact contract and when it refuses to start |
 | `key/cauthy-key.md` | `CAUTHY_KEY`: the one value an application needs; parsing, derivation, signing, identity (read by every SDK, the CLI and Cauthy's dashboard) |
 | `conformance/` | The runner: point it at a backend and it says what passes |
 
@@ -26,7 +25,7 @@ The specification behind every Cauthy SDK, and the suite that proves an SDK foll
       --target http://localhost:3999/api/auth --origin http://localhost:3999 \
       --email member@example.com --level basic
 
-`--json report.json` also writes the report as JSON. `--jwks-path` names the JWKS path of a backend in contract mode. `--key-env NAME` names the environment variable holding the `CAUTHY_KEY` the backend runs on and adds the `key.*` checks (`key/cauthy-key.md`): the key parses, Cauthy knows it, the backend signs in with nothing else and, with `--jwks-path`, publishes its public half. The key is never printed. Build with the Go version in `conformance/go.mod`.
+`--json report.json` also writes the report as JSON. `--key-env NAME` names the environment variable holding the `CAUTHY_KEY` the backend runs on and adds the `key.*` checks (`key/cauthy-key.md`): the key parses, Cauthy knows it, and the backend signs in with nothing else. The key is never printed. Build with the Go version in `conformance/go.mod`.
 
 It needs a backend that serves the protocol and one test account in its tenant. The account must:
 
@@ -98,6 +97,8 @@ Cauthy matches it.
 | `@cauthyhq/spec` | `spec/vX.Y.Z` (= `packages/spec/package.json`'s version) | `release.yml`, approved in the `npm` environment, trusted publishing |
 
 `conformance/v0.5.0`, `spec/v0.2.0`, `go/v0.2.0`: `CAUTHY_KEY` (key/cauthy-key.md), vectors, `--key-env`.
+
+`conformance/v0.6.0`, `spec/v0.3.0`, `go/v0.3.0` (not tagged yet): contracts retired. `contract/pact.md`, `/v1/pact/status`, `connect/self`'s `contract`, the `key.jwks` check, `--jwks-path` and the `pact/seal/v1` label are gone; `sign_in_client_id` and the per-application sign-in switches are in `key/cauthy-key.md` §7–8.
 
 ## License
 

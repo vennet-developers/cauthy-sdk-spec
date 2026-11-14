@@ -241,7 +241,7 @@ func Cases(k Keys) []vectors.Case {
 		}(),
 
 		invalid("aud/other", "R10", "Another audience", signed(with(person(), "aud", []string{"other"})), verify.WrongAudience),
-		invalid("aud/client-id", "R10", "aud is a client id, as on a token meant for one client", signed(with(person(), "aud", "pact.acme-crm")), verify.WrongAudience),
+		invalid("aud/client-id", "R10", "aud is a client id, as on a token meant for one client", signed(with(person(), "aud", "acme-crm")), verify.WrongAudience),
 		invalid("aud/agent-resource", "R10", "An AI agent's token, issued for another resource", signed(agent), verify.WrongAudience),
 
 		invalid("time/expired-at-leeway", "R11", "exp passed 30 seconds ago: the leeway's edge", signed(with(person(), "exp", Now-30)), verify.Expired),

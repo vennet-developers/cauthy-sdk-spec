@@ -83,12 +83,6 @@ func (c *Client) Do(method, path string, body []byte, headers map[string]string)
 	return c.do(method, c.Target+path, path, body, headers)
 }
 
-// GetOrigin sends a GET for a path at the application's origin rather than
-// under the target's prefix: a contract's JWKS, for one.
-func (c *Client) GetOrigin(path string) (*Response, error) {
-	return c.do(http.MethodGet, c.Origin+path, path, nil, nil)
-}
-
 func (c *Client) do(method, u, path string, body []byte, headers map[string]string) (*Response, error) {
 	req, err := http.NewRequestWithContext(c.ctx, method, u, bytes.NewReader(body))
 	if err != nil {

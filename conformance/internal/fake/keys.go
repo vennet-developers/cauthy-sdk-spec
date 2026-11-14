@@ -90,7 +90,7 @@ func (s *Server) self(w http.ResponseWriter, r *http.Request, base string) {
 		"issuer": base, "audience": base, "tenant": map[string]any{"id": "00000000-0000-4000-8000-0000000000a1", "slug": Tenant},
 		"system": "acme-crm", "client_id": ClientID, "sign_in_client_id": ClientID,
 		"app_urls": []string{s.origin()}, "callback_path": "/api/auth/callback",
-		"key": map[string]any{"kid": kid, "retires_at": nil}, "contract": nil,
+		"key": map[string]any{"kid": kid, "retires_at": nil},
 	}})
 }
 

@@ -20,7 +20,6 @@ func RegisterKey(reg *check.Registry) {
 	reg.Add(check.Check{ID: "key.parses", Group: "key", Level: check.Basic, Run: keyParses})
 	reg.Add(check.Check{ID: "key.identity", Group: "key", Level: check.Basic, Run: keyIdentity})
 	reg.Add(check.Check{ID: "key.signs_in", Group: "key", Level: check.Basic, Run: keySignsIn})
-	reg.Add(check.Check{ID: "key.jwks", Group: "key", Level: check.Basic, NAPair: "key.signs_in", Run: keyJWKS})
 }
 
 func parsed(ctx *check.Ctx) (*cauthykey.Key, check.Result, bool) {
@@ -104,37 +103,6 @@ func keySignsIn(ctx *check.Ctx) check.Result {
 		return check.Fail(fmt.Sprintf("sign-in answered %d", res.Status))
 	}
 	return check.Pass("signed in with nothing but the key")
-}
-
-func keyJWKS(ctx *check.Ctx) check.Result {
-	if ctx.JWKSPath == "" {
-		return check.NA("no --jwks-path: the backend has no contract")
-	}
-	k, r, ok := parsed(ctx)
-	if !ok {
-		return r
-	}
-	res, err := ctx.Client.GetOrigin(ctx.JWKSPath)
-	if err != nil || res.Status != 200 {
-		return check.Fail("the JWKS could not be read")
-	}
-	raw := string(res.Body)
-	for _, m := range []string{`"d"`, `"p"`, `"q"`, `"dp"`, `"dq"`, `"qi"`} {
-		if strings.Contains(raw, m) {
-			return check.Fail("the JWKS publishes private key material (" + m + ")")
-		}
-	}
-	var set struct {
-		Keys []map[string]string `json:"keys"`
-	}
-	_ = json.Unmarshal(res.Body, &set)
-	want := k.Derive().KID
-	for _, j := range set.Keys {
-		if j["kty"] == "OKP" && j["crv"] == "Ed25519" && j["kid"] == want {
-			return check.Pass("the key is published: " + want)
-		}
-	}
-	return check.Fail("the key's public half (kid " + want + ") is not in the JWKS")
 }
 
 // newUUID is a random UUID v4, the assertion's jti.

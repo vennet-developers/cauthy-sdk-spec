@@ -1,14 +1,11 @@
 package checks
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/cauthykey"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/check"
-	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/client"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/internal/fake"
 )
 
@@ -77,42 +74,5 @@ func TestKeyIdentityFailsWhenCauthyDoesNotKnowTheKey(t *testing.T) {
 	r := runOne(t, &check.Ctx{Cauthy: base, Key: key}, RegisterKey, "key.identity")
 	if r.Status != check.StatusFail || !strings.Contains(r.Detail, "401") {
 		t.Fatalf("%+v", r)
-	}
-}
-
-func TestKeyJWKSIsNAWithoutJWKSPath(t *testing.T) {
-	ctx := &check.Ctx{Key: "x"}
-	if r := runOne(t, ctx, RegisterKey, "key.jwks"); r.Status != check.StatusNA {
-		t.Fatalf("%+v", r)
-	}
-}
-
-func TestKeyJWKS(t *testing.T) {
-	k, err := cauthykey.Parse(keyChecksTestKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	d := k.Derive()
-	published := `{"keys":[{"kty":"OKP","crv":"Ed25519","x":"` + d.X + `","kid":"` + d.KID + `","alg":"EdDSA","use":"sig"}]}`
-	for _, c := range []struct {
-		name, body, status string
-	}{
-		{"published", published, check.StatusPass},
-		{"another key", `{"keys":[{"kty":"OKP","crv":"Ed25519","x":"AAAA","kid":"other"}]}`, check.StatusFail},
-		{"private member", `{"keys":[{"kty":"OKP","crv":"Ed25519","x":"` + d.X + `","kid":"` + d.KID + `","d":"AAAA"}]}`, check.StatusFail},
-	} {
-		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/.well-known/pact-jwks.json" {
-				http.NotFound(w, r)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(c.body))
-		}))
-		ctx := &check.Ctx{Key: keyChecksTestKey, JWKSPath: "/.well-known/pact-jwks.json", Client: client.New(origin.URL+"/api/auth", origin.URL)}
-		if r := runOne(t, ctx, RegisterKey, "key.jwks"); r.Status != c.status {
-			t.Errorf("%s: %s %s", c.name, r.Status, r.Detail)
-		}
-		origin.Close()
 	}
 }

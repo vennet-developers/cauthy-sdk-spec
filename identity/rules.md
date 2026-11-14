@@ -25,7 +25,7 @@ The session's `user.emailVerified` says which case a person is in, and `GET /v1/
 ## What a client never receives
 
 - An access or refresh token: both stay in the backend. The browser holds a sealed, HttpOnly cookie.
-- The system key or the root key.
+- `CAUTHY_KEY`, or anything derived from it.
 - Anything from a route outside `protocol/routes.yaml`.
 
 ## Settings an application should require
@@ -36,13 +36,13 @@ Tenant settings are read and changed with `GET` and `PUT /v1/settings/auth` (per
 | --- | --- | --- |
 | A valid token means a verified email | `confirm_email: true`, `verify_grace_days: 0` | `PUT /v1/settings/auth` |
 | Nobody self-registers | `allow_signup: false` | `PUT /v1/settings/auth` |
+| People may choose "keep me signed in" | `persistent_sessions: true` (workspace-wide; a client no longer holds it, and `allow_persistent_sessions` on a client answers `400 persistent_sessions_moved`) | `PUT /v1/settings/auth` |
 
-Two needs belong to the application's Pact link, not to a tenant setting:
+Two needs belong to the application, not to the workspace. They are switches on the client people sign in through (`sign_in_client_id` of `GET /v1/connect/self`), set on the application's card in Cauthy's dashboard or with `PATCH /v1/oauth/clients/{client_id}` (permission `oauth_clients:manage`):
 
-| Need | Link field | Notes |
+| Need | Field | Notes |
 | --- | --- | --- |
-| Only the system's own proof signs people in | `sign_in.require_system_proof: true \| false \| auto` (the graph carries `system_proof: required \| auto \| off` beside the boolean) | `auto`: Cauthy turns the requirement on by itself after the first sign-in through this client that carried the proof, and records when; until then, and for readers that know only the boolean, `require_system_proof` stays `false`. Stage 1 SDKs read only `true` or `false`. Needs a `service` block |
-| People may stay signed in | `sign_in.persistent_sessions: true` | The contract owns the switch: changing the client by hand answers `409 from_contract` |
-| A verified email for this application | `sign_in.require_verified_email: true` | |
+| Only the application's own server signs people in | `system_proof: off \| auto \| required` | Every sign-in through the client must carry the system's proof (`X-Cauthy-System-Token`), else `403 system_proof_required`. `auto` turns into `required` by itself after the first sign-in that carried the proof (`system_proof_required_at`). Needs an application on `CAUTHY_KEY` (`400 system_proof_needs_key`) |
+| A verified email for this application | `require_verified_email: true` | No token is issued through the client to a person whose email is unconfirmed |
 
-Everything in the table above except `persistent_sessions` and the boolean `require_system_proof` (`require_verified_email`, `system_proof`, `auto`) is not read by stage 1 SDKs; see [`contract/pact.md`](../contract/pact.md).
+Cauthy enforces both; an SDK reads neither and needs no change or deploy when they change. See [`key/cauthy-key.md`](../key/cauthy-key.md) §8.

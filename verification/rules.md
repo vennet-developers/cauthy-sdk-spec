@@ -38,7 +38,7 @@ The keys are published at `<issuer>/.well-known/jwks.json`: every active key as 
 | `leeway` | Clock tolerance. Default 30 seconds when unset; 0 to 60 accepted, and an explicit 0 means none |
 | `allow_anonymous` | Whether a guest's token is accepted. Default `false` |
 | `allow_client_tokens` | Whether a client's own token (`token_use`, from a `client_credentials` grant) is accepted, for a backend that serves machines as well as people. Default `false` |
-| `client_id` | Optional: the client the backend signs people in through. When set, a person's token issued through another client is refused (R15). In contract mode it is the link's sign-in client (see [`contract/pact.md`](../contract/pact.md)). Default: none, and `azp` is not checked |
+| `client_id` | Optional: the client the backend signs people in through. When set, a person's token issued through another client is refused (R15). On `CAUTHY_KEY` it is the `sign_in_client_id` `GET /v1/connect/self` answers (see [`key/cauthy-key.md`](../key/cauthy-key.md) §7), which may differ from the key's own client. Default: none, and `azp` is not checked |
 
 A configuration that breaks a rule is an error when the verifier is built, before it verifies anything.
 

@@ -61,7 +61,6 @@ func main() {
 		{"valid/basic", "https://cauthy.api.example.com", client, "%s"},
 		{"valid/local", "http://localhost:8080", client, "%s"},
 		{"valid/loopback-port", "http://127.0.0.1:3001", client, "%s"},
-		{"valid/contract-service-client", "https://cauthy.api.example.com", "pact.acme-crm-signs-in-with-cauthy.service", "%s"},
 		{"valid/surrounding-whitespace", "https://cauthy.api.example.com", client, " \t%s\r\n"},
 	} {
 		key := must(cauthykey.Compose(c.issuer, c.client, secret))

@@ -1,6 +1,6 @@
 {
   "name": "@cauthyhq/spec",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript types of Cauthy's public API and of the auth-bff protocol, generated from cauthy-sdk-spec.",
   "license": "Apache-2.0",
   "author": "Vennet Developers",

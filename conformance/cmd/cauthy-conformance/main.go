@@ -26,10 +26,10 @@ import (
 )
 
 type options struct {
-	target, origin, email, password, level, table, jsonOut, jwksPath string
-	cauthy, tenant, adminTokenEnv, adminToken, clientID              string
-	keyEnv, key                                                      string
-	switchWait                                                       time.Duration
+	target, origin, email, password, level, table, jsonOut string
+	cauthy, tenant, adminTokenEnv, adminToken, clientID    string
+	keyEnv, key                                            string
+	switchWait                                             time.Duration
 }
 
 func main() {
@@ -40,7 +40,6 @@ func main() {
 	flag.StringVar(&o.level, "level", "basic", "basic, strict or switches")
 	flag.StringVar(&o.table, "table", "", "a route table to use instead of the embedded one")
 	flag.StringVar(&o.jsonOut, "json", "", "also write the report as JSON to this file")
-	flag.StringVar(&o.jwksPath, "jwks-path", "", "contract mode: the JWKS path the backend serves")
 	flag.StringVar(&o.cauthy, "cauthy", "", "Cauthy's address, for the dashboard-switch checks")
 	flag.StringVar(&o.tenant, "tenant", "", "the backend's workspace slug in Cauthy")
 	flag.StringVar(&o.adminTokenEnv, "admin-token-env", "CAUTHY_ADMIN_TOKEN", "the environment variable that holds Cauthy's admin token")
@@ -99,7 +98,7 @@ func run(ctx context.Context, o options, out, errOut io.Writer) int {
 		table = raw
 	}
 	res, err := runner.Run(ctx, runner.Options{Target: o.target, Origin: o.origin, Email: o.email, Password: o.password,
-		Level: o.level, JWKSPath: o.jwksPath, Table: table,
+		Level: o.level, Table: table,
 		Cauthy: o.cauthy, Tenant: o.tenant, AdminToken: o.adminToken, ClientID: o.clientID, SwitchWait: o.switchWait, Key: o.key})
 	var usage *runner.UsageError
 	if errors.As(err, &usage) {

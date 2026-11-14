@@ -61,8 +61,6 @@ tags:
     description: Workspace sign-in settings, phone, passkeys and custom domain. Require `settings:manage`.
   - name: Connect
     description: Connecting a client system in one call, and its progress.
-  - name: Pact
-    description: How the workspace's contracted systems stand against their contracts (the Pact graph).
   - name: Users
     description: 'The workspace''s people: list, invite, disable, sessions, tokens, import.'
   - name: Organizations
@@ -4416,7 +4414,7 @@ paths:
       tags:
         - Connect
       summary: Who the calling application is (CAUTHY_KEY)
-      description: 'Asked by an application with its own token (the `client_credentials` token it gets with its `CAUTHY_KEY` assertion, the same token it sends as `X-Cauthy-System-Token`): its workspace, its system, its client and the client people sign in through, the origins of its registered return addresses (development first), the return path, the key it last proved itself with, and its contract when a link of the contracts graph names it. `X-Tenant-Key` is optional with a system''s token. Cacheable for five minutes (`Cache-Control: private, max-age=300`) and revalidated with its `ETag` (`If-None-Match` answers 304). Nothing in it is secret.'
+      description: 'Asked by an application with its own token (the `client_credentials` token it gets with its `CAUTHY_KEY` assertion, the same token it sends as `X-Cauthy-System-Token`): its workspace, its system, its client and the client people sign in through, the origins of its registered return addresses (development first), the return path and the key it last proved itself with. `X-Tenant-Key` is optional with a system''s token. Cacheable for five minutes (`Cache-Control: private, max-age=300`) and revalidated with its `ETag` (`If-None-Match` answers 304). Nothing in it is secret.'
       operationId: getConnectSelf
       x-cauthy-flow: false
       security:
@@ -4471,78 +4469,6 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '410':
           description: "`client_inactive`: the application's client is gone or turned off."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-  /v1/pact/status:
-    get:
-      tags:
-        - Pact
-      summary: How the workspace's contracted systems stand against their contracts
-      description: 'Checked now, against the contracts graph as Cauthy applied it: what the contract says, what Cauthy holds, what is outside the contract and what is missing. Nothing is changed by checking. With `system`, that system alone (`{"data": …}`); without it, every system a link names in this workspace (`{"data": [...], "total_count": n}`). A system''s own token always gets its own system. Requires `oauth_clients:manage`, or a system''s own token.'
-      operationId: getPactStatus
-      x-cauthy-permission: oauth_clients:manage
-      security:
-        - BearerAuth: []
-        - SystemToken: []
-      parameters:
-        - name: X-Tenant-Key
-          in: header
-          required: false
-          description: Tenant slug. May be left out when the request carries a system's own token, which names its tenant.
-          schema:
-            type: string
-        - name: system
-          in: query
-          required: false
-          description: Only this system (forced to the token's own system for a system token).
-          schema:
-            type: string
-      responses:
-        '200':
-          description: One system's status, or every contracted system's
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - type: object
-                    required:
-                      - data
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/PactStatus'
-                  - type: object
-                    required:
-                      - data
-                      - total_count
-                    properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/PactStatus'
-                      total_count:
-                        type: integer
-        '401':
-          description: '`unauthorized` (no or invalid token), `token_revoked`'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        '403':
-          description: '`forbidden`: the caller lacks `oauth_clients:manage`; `other_system`: a system''s token asked for another system'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        '404':
-          description: '`not_contracted`: no link of the contracts repository names this system in this workspace'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        '500':
-          description: '`internal_error`'
           content:
             application/json:
               schema:
@@ -4735,7 +4661,7 @@ paths:
       summary: Update an OAuth client
       operationId: updateOAuthClient
       x-cauthy-permission: oauth_clients:manage
-      description: Changes the name, roles, scopes or the application's address. A field left out is left as it is. Requires `oauth_clients:manage`.
+      description: Changes the name, roles, scopes, the application's address, or what protects the sign-ins through it (`system_proof`, `require_verified_email`). A field left out is left as it is. Every change is audited (`oauth.client.updated`, with `before` and `after` when the protection changed); one that asks less than before emails the workspace's admins. Requires `oauth_clients:manage`.
       security:
         - BearerAuth: []
       parameters:
@@ -4765,7 +4691,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/OAuthClient'
         '400':
-          description: '`bad_request` (not JSON) or `validation_error`: an empty name, or an `app_url` that is no application address (`invalid`) or would turn development into production or back (`kind_changed`).'
+          description: '`bad_request` (not JSON); `validation_error`: an empty name, or an `app_url` that is no application address (`invalid`) or would turn development into production or back (`kind_changed`), or a `system_proof` that is not `off`, `auto` or `required` (`invalid`); `persistent_sessions_moved`: the body sets `allow_persistent_sessions`, now the workspace''s `persistent_sessions`; `system_proof_needs_key`: `system_proof` turned on for an application that does not prove itself with its key.'
           content:
             application/json:
               schema:
@@ -4833,12 +4759,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-        '409':
-          description: '`from_contract`: a contract''s sign-in client; keys go on its service client.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
         '401':
           description: '`unauthorized`: missing or invalid token.'
           content:
@@ -4900,7 +4820,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: '`key_in_use` (the key is already an application''s of the workspace); `from_contract` (a contract''s sign-in client).'
+          description: '`key_in_use` (the key is already an application''s of the workspace).'
           content:
             application/json:
               schema:
@@ -4968,12 +4888,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-        '409':
-          description: '`from_contract`: a contract''s sign-in client.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
         '401':
           description: '`unauthorized`: missing or invalid token.'
           content:
@@ -5015,7 +4929,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: '`no_key`: register a key first, since removing the secret would lock the application out; `from_contract`.'
+          description: '`no_key`: register a key first, since removing the secret would lock the application out.'
           content:
             application/json:
               schema:
@@ -7910,6 +7824,9 @@ components:
           type: boolean
         mfa_required:
           type: boolean
+        persistent_sessions:
+          type: boolean
+          description: 'People may choose "keep me signed in" (30 days without use, 90 in all) on every application of the workspace. Off, a session ends with the browser or after 12 hours.'
         verify_grace_days:
           type: integer
           description: Days an unconfirmed account may sign in before confirming.
@@ -8011,6 +7928,9 @@ components:
           type: boolean
         mfa_required:
           type: boolean
+        persistent_sessions:
+          type: boolean
+          description: 'Lets people choose "keep me signed in" on every application of the workspace. Turning it off cuts no session already made: each ends at its own time.'
         anonymous_ttl_days:
           type: integer
           minimum: 1
@@ -8189,7 +8109,7 @@ components:
           description: The client the key authenticates.
         sign_in_client_id:
           type: string
-          description: The client people sign in through (`pact.<link>` with a contract; else `client_id`).
+          description: The client people sign in through (for an application's own identity that signs nobody in itself, its paired sign-in client; else `client_id`).
         app_urls:
           type: array
           items:
@@ -8209,238 +8129,6 @@ components:
               type: string
               format: date-time
               nullable: true
-        contract:
-          type: object
-          nullable: true
-          description: The application's contract, when a link of the contracts graph names it.
-          properties:
-            link:
-              type: string
-            system_proof:
-              type: string
-              enum:
-                - 'off'
-                - auto
-                - required
-            require_verified_email:
-              type: boolean
-            in_step:
-              type: boolean
-            checked_at:
-              type: string
-              format: date-time
-              nullable: true
-    PactStatus:
-      type: object
-      description: How one contracted system stands against its contract, checked now.
-      required:
-        - system
-        - tenant_id
-        - checked_at
-        - in_step
-        - contract
-        - held
-        - outside
-        - missing
-        - reconciled_at
-      properties:
-        system:
-          type: string
-        tenant_id:
-          type: string
-          format: uuid
-        checked_at:
-          type: string
-          format: date-time
-        in_step:
-          type: boolean
-          description: Nothing is outside the contract and nothing is missing.
-        contract:
-          $ref: '#/components/schemas/PactContract'
-        held:
-          $ref: '#/components/schemas/PactHeld'
-        outside:
-          type: array
-          description: What Cauthy holds that the contract does not name.
-          items:
-            $ref: '#/components/schemas/PactItem'
-        missing:
-          type: array
-          description: What the contract names that Cauthy does not hold as it says.
-          items:
-            $ref: '#/components/schemas/PactItem'
-        reconciled_at:
-          type: string
-          format: date-time
-          nullable: true
-          description: When the daily reconciliation last checked this system; null before the first.
-        keys:
-          $ref: '#/components/schemas/PactKeys'
-    PactKeys:
-      type: object
-      description: 'The CAUTHY_KEY of the system''s service client: the kids registered on it and the EdDSA kids published at its jwks_url (the key set last read). Absent while the client has no registered key (RS256 keys only). A kid on one side only is also a `key` item of `missing` or `outside`.'
-      properties:
-        registered:
-          type: array
-          items:
-            type: string
-        published:
-          type: array
-          items:
-            type: string
-        missing:
-          type: array
-          description: Registered, not published, so the application is not deployed with the key.
-          items:
-            type: string
-        outside:
-          type: array
-          description: Published, not registered.
-          items:
-            type: string
-        matches:
-          type: boolean
-    PactContract:
-      type: object
-      required:
-        - clients
-      properties:
-        clients:
-          type: array
-          items:
-            $ref: '#/components/schemas/PactContractClient'
-        roles:
-          type: object
-          description: Roles by kind of organization, as the system's manifest lists them; absent when it lists none.
-          additionalProperties:
-            type: array
-            items:
-              type: string
-    PactContractClient:
-      type: object
-      required:
-        - client_id
-        - link
-        - purpose
-        - grant_types
-      properties:
-        client_id:
-          type: string
-        link:
-          type: string
-        purpose:
-          type: string
-          enum:
-            - sign_in
-            - service
-        redirect_uris:
-          type: array
-          items:
-            type: string
-        grant_types:
-          type: array
-          items:
-            type: string
-        require_system_proof:
-          type: boolean
-        system_proof:
-          type: string
-          enum:
-            - 'off'
-            - auto
-            - required
-        require_verified_email:
-          type: boolean
-        persistent_sessions:
-          type: boolean
-        jwks_url:
-          type: string
-    PactHeld:
-      type: object
-      required:
-        - clients
-        - roles
-        - organizations
-      properties:
-        clients:
-          type: array
-          items:
-            $ref: '#/components/schemas/PactHeldClient'
-        roles:
-          type: array
-          items:
-            type: string
-        organizations:
-          type: object
-          description: Active organizations by kind.
-          additionalProperties:
-            type: integer
-    PactHeldClient:
-      type: object
-      required:
-        - client_id
-        - name
-        - redirect_uris
-        - grant_types
-        - require_system_proof
-        - system_proof_auto
-        - require_verified_email
-        - persistent_sessions
-        - active
-      properties:
-        client_id:
-          type: string
-        name:
-          type: string
-        link:
-          type: string
-          description: The sign-in link it came from.
-        service_link:
-          type: string
-          description: The service link it came from.
-        system:
-          type: string
-          description: The system it is the identity of.
-        redirect_uris:
-          type: array
-          items:
-            type: string
-        grant_types:
-          type: array
-          items:
-            type: string
-        require_system_proof:
-          type: boolean
-        system_proof_auto:
-          type: boolean
-        system_proof_required_at:
-          type: string
-          format: date-time
-        require_verified_email:
-          type: boolean
-        persistent_sessions:
-          type: boolean
-        jwks_url:
-          type: string
-        active:
-          type: boolean
-    PactItem:
-      type: object
-      description: One difference between the contract and what Cauthy holds.
-      required:
-        - kind
-        - value
-      properties:
-        kind:
-          type: string
-          description: 'What differs: client, redirect_uri, grant_type, role, organization, require_system_proof, system_proof, system_proof_required_at, require_verified_email, persistent_sessions, jwks_url or key.'
-        client_id:
-          type: string
-          description: The client it is on, when it is on one.
-        value:
-          type: string
-        detail:
-          type: string
     WorkspaceUser:
       type: object
       properties:
@@ -8961,7 +8649,7 @@ components:
               - whatsapp
         persistent_sessions:
           type: boolean
-          description: When the request names an application (`X-Cauthy-Client-Id`), whether it lets people stay signed in. A sign-in screen shows its "keep me signed in" box only when true.
+          description: Whether the workspace lets people stay signed in. A sign-in screen shows its "keep me signed in" box only when true.
         allow_anonymous:
           type: boolean
         anonymous_ttl_days:
@@ -10028,9 +9716,17 @@ components:
           type: string
         system_import:
           type: boolean
-        allow_persistent_sessions:
+        system_proof:
+          type: string
+          enum: ['off', auto, required]
+          description: 'Whether only the application''s own server may sign people in through the client: every sign-in must carry its system''s proof (`X-Cauthy-System-Token`), so a copied client id is useless on its own. `auto` turns into a requirement after the first sign-in that carried it.'
+        require_verified_email:
           type: boolean
-          description: 'Whether people signing in through this client may choose "keep me signed in". A contract link that sets `sign_in.persistent_sessions` owns it.'
+          description: No token is issued through the client to a person whose email is unconfirmed.
+        system_proof_required_at:
+          type: string
+          format: date-time
+          description: Under `auto`, when the first sign-in that carried the proof turned it on. Absent until then.
     OAuthClientUpdateRequest:
       type: object
       properties:
@@ -10051,7 +9747,15 @@ components:
           example: https://app.example.com
         allow_persistent_sessions:
           type: boolean
-          description: Lets this client's people stay signed in (30 days without use, 90 in all) when they ask. A client a contract link owns answers `409 from_contract`.
+          deprecated: true
+          description: 'No longer a client''s: refused with `400 persistent_sessions_moved`. "Keep me signed in" is the workspace''s `persistent_sessions` (`PUT /v1/settings/auth`).'
+        system_proof:
+          type: string
+          enum: ['off', auto, required]
+          description: 'Only the application''s own server may sign people in through the client. `auto` waits for the first sign-in that carries the proof and then requires it; `required` requires it at once; `off` turns it off. Turning it on needs an application that proves itself with its key (`400 system_proof_needs_key`). Turning it off emails the workspace''s admins.'
+        require_verified_email:
+          type: boolean
+          description: No token to a person whose email is unconfirmed. Turning it off emails the workspace's admins.
     OAuthThemeFont:
       type: object
       required:

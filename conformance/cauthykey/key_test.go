@@ -86,7 +86,6 @@ func TestDerive(t *testing.T) {
 	for label, want := range map[string]string{
 		"pact/cookie/v1": "c93630824487cce95ed28ba33123de9fe468be3e4151ad257cc8c0dd1e1d90cf",
 		"pact/flow/v1":   "e9efca8a01c0427c838670f1c6ccd940bc13e2bdb44f3c0b7d70820a00de180e",
-		"pact/seal/v1":   "c8d78656bb2eddc6c8d32162425d2c3f0a1d8f2896118f3db9c11044d3faa28c",
 		"cauthy/sign/v1": "184fe579a0174e164d119120c37b847966e0b246428b19d570a3e0775b864f4b",
 	} {
 		if got := hex.EncodeToString(d.Labels[label]); got != want {
