@@ -2169,6 +2169,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The platform owner, administering a client's workspace, has no account in it (`no_account_here`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     patch:
       tags:
         - Account
@@ -3793,6 +3799,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '403':
+          description: '`shared_credentials_not_for_production`: the provider uses Cauthy''s shared app, which is for development and testing only, and `redirect_uri` is a production address'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '404':
           description: '`provider_not_configured`'
           content:
@@ -3800,7 +3812,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '503':
-          description: '`provider_unavailable` — the provider answers with a form POST this server cannot receive'
+          description: '`provider_unavailable` — the provider answers with a form POST this server cannot receive; `shared_credentials_unavailable`: the provider uses Cauthy''s shared app, which this deployment does not offer'
           content:
             application/json:
               schema:
@@ -6007,7 +6019,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '403':
-          description: '`forbidden` (missing `organizations:manage`), `other_system`'
+          description: '`forbidden` (missing `organizations:manage`), `other_system`, `deliver_needs_system`'
           content:
             application/json:
               schema:
@@ -6802,7 +6814,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '403':
-          description: '`forbidden`: the caller lacks `users:manage`'
+          description: '`forbidden`: the caller lacks `users:manage`; `deliver_needs_system`: `deliver` false without an application''s own token'
           content:
             application/json:
               schema:
@@ -8188,7 +8200,10 @@ components:
           properties:
             invitation_sent:
               type: boolean
-              description: False when the email could not be sent.
+              description: False when the email could not be sent, and with `deliver` false.
+            invitation:
+              $ref: '#/components/schemas/InvitationLink'
+              description: Only with `deliver` false.
     InvitationOptions:
       type: object
       properties:
@@ -8201,6 +8216,21 @@ components:
         return_to:
           type: string
           description: Where to land afterwards; must be on the origin of one of the client's redirect URIs.
+        deliver:
+          type: boolean
+          default: true
+          description: '`false` mails nothing and answers the invitation''s link (`invitation`) for the application to send itself. Only an application''s own token may ask for it (`deliver_needs_system`, 403). The link is single use, lasts as long as a mailed one (7 days) and spends any link of the account issued or mailed before it.'
+    InvitationLink:
+      type: object
+      description: The link that makes an invited account the person's, as the invitation mail carries it. It is a credential, so keep it out of logs.
+      properties:
+        url:
+          type: string
+          format: uri
+          description: The application's page for accepting invitations (`X-Cauthy-Link-To`) with its `token`, else Cauthy's own page.
+        expires_at:
+          type: string
+          format: date-time
     InviteUserRequest:
       allOf:
         - type: object
@@ -8328,6 +8358,9 @@ components:
             invited:
               type: boolean
               description: 'The address had no account: one was made and invited.'
+            invitation:
+              $ref: '#/components/schemas/InvitationLink'
+              description: Only with `deliver` false, when an account was made.
     AddOrganizationMemberRequest:
       allOf:
         - type: object
