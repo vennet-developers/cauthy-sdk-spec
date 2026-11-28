@@ -5923,7 +5923,13 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/OrganizationMember'
+                      allOf:
+                        - $ref: '#/components/schemas/OrganizationMember'
+                        - type: object
+                          properties:
+                            invited:
+                              type: boolean
+                              description: The invitation was sent and not yet accepted (the account has no password yet); `POST /v1/users/{id}/invite` sends it again. `status` stays `active`.
                   total_count:
                     type: integer
                     description: Number of items in `data`.
